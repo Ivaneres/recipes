@@ -8,8 +8,9 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const { login, register } = useAuth();
+  const { login, register, loginAsGuest } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -20,6 +21,11 @@ export default function Login() {
       if (isLogin) {
         await login(username, password);
       } else {
+        // Validate password confirmation
+        if (password !== confirmPassword) {
+          setError('Passwords do not match');
+          return;
+        }
         await register(username, email, password);
       }
       navigate('/');
@@ -93,6 +99,20 @@ export default function Login() {
             />
           </div>
 
+          {!isLogin && (
+            <div className="form-group">
+              <label className="form-label">Confirm Password</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                className="form-input"
+                placeholder="Confirm your password"
+              />
+            </div>
+          )}
+
           <button
             type="submit"
             className="action-button action-button-primary"
@@ -102,12 +122,49 @@ export default function Login() {
           </button>
         </form>
 
+        {isLogin && (
+          <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+            <div style={{ 
+              margin: '20px 0', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '12px',
+              color: '#666'
+            }}>
+              <div style={{ flex: 1, height: '1px', background: '#e0e0e0' }}></div>
+              <span style={{ fontSize: '0.875rem' }}>or</span>
+              <div style={{ flex: 1, height: '1px', background: '#e0e0e0' }}></div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                loginAsGuest();
+                navigate('/');
+              }}
+              className="action-button action-button-secondary"
+              style={{ width: '100%', justifyContent: 'center' }}
+            >
+              👤 Login as Guest
+            </button>
+            <p style={{ 
+              marginTop: '12px', 
+              fontSize: '0.875rem', 
+              color: '#888',
+              lineHeight: '1.5'
+            }}>
+              Browse public recipes without creating an account
+            </p>
+          </div>
+        )}
+
         <p style={{ textAlign: 'center', margin: 0, color: '#666' }}>
           {isLogin ? "Don't have an account? " : 'Already have an account? '}
           <button
             onClick={() => {
               setIsLogin(!isLogin);
               setError('');
+              setPassword('');
+              setConfirmPassword('');
             }}
             style={{ 
               background: 'none', 

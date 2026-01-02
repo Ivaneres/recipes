@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { sharedStyles } from '../utils/styles';
 
 export default function Home() {
-  const { user, isAdmin } = useAuth();
+  const { user, isGuest } = useAuth();
 
   return (
     <div className="page-container">
@@ -42,7 +42,7 @@ export default function Home() {
           <p style={{ margin: 0, color: '#666' }}>Explore your collection of recipes</p>
         </Link>
 
-        {isAdmin && (
+        {!isGuest && (
           <>
             <Link
               to="/recipes/new"
@@ -92,28 +92,30 @@ export default function Home() {
           </>
         )}
 
-        <Link
-          to="/meal-plans"
-          className="card"
-          style={{ 
-            textDecoration: 'none', 
-            color: 'inherit',
-            transition: 'transform 0.2s, box-shadow 0.2s',
-            cursor: 'pointer'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-4px)';
-            e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.12)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
-          }}
-        >
-          <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📅</div>
-          <h2 style={{ margin: '0 0 8px 0', fontSize: '1.5rem', color: '#213547' }}>Meal Plans</h2>
-          <p style={{ margin: 0, color: '#666' }}>Plan your meals and shopping lists</p>
-        </Link>
+        {!isGuest && (
+          <Link
+            to="/meal-plans"
+            className="card"
+            style={{ 
+              textDecoration: 'none', 
+              color: 'inherit',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.12)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
+            }}
+          >
+            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📅</div>
+            <h2 style={{ margin: '0 0 8px 0', fontSize: '1.5rem', color: '#213547' }}>Meal Plans</h2>
+            <p style={{ margin: 0, color: '#666' }}>Plan your meals and shopping lists</p>
+          </Link>
+        )}
       </div>
     </div>
   );

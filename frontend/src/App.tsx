@@ -38,7 +38,7 @@ function App() {
           <Route
             path="/recipes/new"
             element={
-              <ProtectedRoute requireAdmin>
+              <ProtectedRoute requireAuth>
                 <RecipeEdit />
               </ProtectedRoute>
             }
@@ -46,7 +46,7 @@ function App() {
           <Route
             path="/recipes/import"
             element={
-              <ProtectedRoute requireAdmin>
+              <ProtectedRoute requireAuth>
                 <RecipeImport />
               </ProtectedRoute>
             }
@@ -54,7 +54,7 @@ function App() {
           <Route
             path="/recipes/:id/edit"
             element={
-              <ProtectedRoute requireAdmin>
+              <ProtectedRoute requireAuth>
                 <RecipeEdit />
               </ProtectedRoute>
             }
@@ -70,7 +70,7 @@ function App() {
           <Route
             path="/meal-plans"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requireAuth>
                 <MealPlans />
               </ProtectedRoute>
             }
@@ -78,7 +78,7 @@ function App() {
           <Route
             path="/meal-plans/:id"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requireAuth>
                 <MealPlanDetail />
               </ProtectedRoute>
             }

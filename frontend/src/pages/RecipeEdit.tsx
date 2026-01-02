@@ -15,7 +15,7 @@ interface Ingredient {
 export default function RecipeEdit() {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const isNew = !id;
 
   const [title, setTitle] = useState('');
@@ -29,25 +29,29 @@ export default function RecipeEdit() {
   const [sourceUrl, setSourceUrl] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [uploadingCover, setUploadingCover] = useState(false);
 
   useEffect(() => {
-    if (!isAdmin) {
-      navigate('/recipes');
-      return;
-    }
-
     if (!isNew) {
       fetchRecipe();
     }
-  }, [id, isAdmin, navigate, isNew]);
+  }, [id, isNew]);
 
   const fetchRecipe = async () => {
     try {
       const response = await api.get(`/recipes/${id}`);
       const recipe = response.data;
+      
+      // Check if user can edit this recipe
+      if (!isAdmin && recipe.created_by !== user?.id) {
+        setError('You do not have permission to edit this recipe');
+        setTimeout(() => navigate('/recipes'), 2000);
+        return;
+      }
+      
       setTitle(recipe.title || '');
       setCoverImage(recipe.cover_image || null);
       setDescription(recipe.description || '');
@@ -58,6 +62,7 @@ export default function RecipeEdit() {
       setServings(recipe.servings || '');
       setSourceUrl(recipe.source_url || '');
       setTags(recipe.tags || []);
+      setIsPrivate(recipe.is_private || false);
     } catch (err) {
       console.error('Error fetching recipe:', err);
       setError('Failed to load recipe');
@@ -132,6 +137,7 @@ export default function RecipeEdit() {
         servings: servings ? Number(servings) : null,
         source_url: sourceUrl || null,
         tags: tags || [], // Always send tags array, even if empty
+        is_private: isPrivate,
       };
 
       if (isNew) {
@@ -365,6 +371,23 @@ export default function RecipeEdit() {
               className="form-input"
               placeholder="https://example.com/recipe"
             />
+          </div>
+
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={isPrivate}
+                onChange={(e) => setIsPrivate(e.target.checked)}
+                style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+              />
+              <span className="form-label" style={{ margin: 0 }}>
+                Make this recipe private (only visible to you)
+              </span>
+            </label>
+            <p style={{ marginTop: '8px', fontSize: '0.875rem', color: '#666', marginLeft: '32px' }}>
+              Private recipes will only be visible to you and won't appear in other users' recipe lists.
+            </p>
           </div>
         </div>
 

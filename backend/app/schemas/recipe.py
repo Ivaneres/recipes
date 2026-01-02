@@ -20,6 +20,7 @@ class RecipeBase(BaseModel):
     servings: Optional[int] = None
     source_url: Optional[HttpUrl] = None
     tags: Optional[List[str]] = None
+    is_private: Optional[bool] = False
 
 
 class RecipeCreate(RecipeBase):
@@ -37,6 +38,7 @@ class RecipeUpdate(BaseModel):
     servings: Optional[int] = None
     source_url: Optional[HttpUrl] = None
     tags: Optional[List[str]] = None
+    is_private: Optional[bool] = None
 
 
 class RecipeResponse(RecipeBase):

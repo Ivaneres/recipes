@@ -4,7 +4,7 @@ import { sharedStyles } from '../utils/styles';
 
 export default function Navigation() {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, isGuest, logout } = useAuth();
 
   // Don't show navigation on login page
   if (location.pathname === '/login') {
@@ -14,9 +14,8 @@ export default function Navigation() {
   return (
     <nav style={{
       background: 'white',
-      borderBottom: '1px solid #e0e0e0',
+      borderBottom: '2px solid #e0e0e0',
       padding: '16px 20px',
-      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
       position: 'sticky',
       top: 0,
       zIndex: 100
@@ -53,28 +52,30 @@ export default function Navigation() {
           >
             📚 Recipes
           </Link>
-          <Link
-            to="/meal-plans"
-            className="action-button action-button-secondary"
-            style={{ 
-              textDecoration: 'none',
-              padding: '10px 20px'
-            }}
-          >
-            📅 Meal Plans
-          </Link>
+          {!isGuest && (
+            <Link
+              to="/meal-plans"
+              className="action-button action-button-secondary"
+              style={{ 
+                textDecoration: 'none',
+                padding: '10px 20px'
+              }}
+            >
+              📅 Meal Plans
+            </Link>
+          )}
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <span style={{ color: '#666', fontSize: '0.9rem' }}>
-            {user?.username}
+            {isGuest ? 'Guest' : user?.username}
           </span>
           <button
             onClick={logout}
             className="action-button action-button-secondary"
             style={{ padding: '10px 20px', fontSize: '0.9rem' }}
           >
-            Logout
+            {isGuest ? 'Login' : 'Logout'}
           </button>
         </div>
       </div>

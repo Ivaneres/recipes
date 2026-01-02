@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { sharedStyles } from '../utils/styles';
 
 interface Comment {
@@ -29,6 +31,8 @@ interface AdminFeaturesProps {
 
 // Component for ratings and comments (available to everyone)
 export function RecipeInteractions({ recipeId }: { recipeId: number }) {
+  const { isGuest } = useAuth();
+  const navigate = useNavigate();
   const [comments, setComments] = useState<Comment[]>([]);
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [averageRating, setAverageRating] = useState<number | null>(null);
@@ -59,6 +63,13 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
   };
 
   const handleAddComment = async () => {
+    if (isGuest) {
+      const shouldLogin = confirm('Please log in to leave a comment. Would you like to go to the login page?');
+      if (shouldLogin) {
+        navigate('/login');
+      }
+      return;
+    }
     if (!newComment.trim()) return;
     setLoading(true);
     try {
@@ -109,6 +120,13 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
   };
 
   const handleAddRating = async () => {
+    if (isGuest) {
+      const shouldLogin = confirm('Please log in to rate this recipe. Would you like to go to the login page?');
+      if (shouldLogin) {
+        navigate('/login');
+      }
+      return;
+    }
     setLoading(true);
     try {
       await api.post('/ratings', {
@@ -142,32 +160,53 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
             )}
           </div>
         )}
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#213547', fontWeight: '500' }}>
-            Your Rating:
-            <select
-              value={newRating}
-              onChange={(e) => setNewRating(Number(e.target.value))}
-              className="form-input"
-              style={{ width: 'auto', padding: '8px 12px', fontSize: '1rem' }}
+        {isGuest ? (
+          <div style={{ 
+            padding: '16px', 
+            backgroundColor: '#fff3cd', 
+            border: '1px solid #ffc107',
+            borderRadius: '8px',
+            color: '#856404'
+          }}>
+            <p style={{ margin: '0 0 12px 0', fontWeight: '500' }}>
+              🔒 Please log in to rate this recipe
+            </p>
+            <button
+              onClick={() => navigate('/login')}
+              className="action-button action-button-primary"
+              style={{ padding: '8px 16px', fontSize: '0.9rem' }}
             >
-              {[1, 2, 3, 4, 5].map(r => (
-                <option key={r} value={r}>{r} ⭐</option>
-              ))}
-            </select>
-          </label>
-          <button
-            onClick={handleAddRating}
-            disabled={loading}
-            className="action-button action-button-primary"
-            style={{ 
-              opacity: loading ? 0.6 : 1,
-              cursor: loading ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {loading ? '⏳ Saving...' : 'Rate'}
-          </button>
-        </div>
+              Log In
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#213547', fontWeight: '500' }}>
+              Your Rating:
+              <select
+                value={newRating}
+                onChange={(e) => setNewRating(Number(e.target.value))}
+                className="form-input"
+                style={{ width: 'auto', padding: '8px 12px', fontSize: '1rem' }}
+              >
+                {[1, 2, 3, 4, 5].map(r => (
+                  <option key={r} value={r}>{r} ⭐</option>
+                ))}
+              </select>
+            </label>
+            <button
+              onClick={handleAddRating}
+              disabled={loading}
+              className="action-button action-button-primary"
+              style={{ 
+                opacity: loading ? 0.6 : 1,
+                cursor: loading ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {loading ? '⏳ Saving...' : 'Rate'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Comments Section */}
@@ -175,32 +214,54 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
         <h3 style={{ color: '#213547', fontSize: '1.5rem', fontWeight: '600', marginTop: 0, marginBottom: '16px' }}>
           💬 Comments
         </h3>
-        <div style={{ marginBottom: '20px' }}>
-          <textarea
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Add a comment..."
-            rows={4}
-            className="form-input"
-            style={{ 
-              resize: 'vertical',
-              fontFamily: 'inherit',
-              minHeight: '100px'
-            }}
-          />
-          <button
-            onClick={handleAddComment}
-            disabled={loading || !newComment.trim()}
-            className="action-button action-button-primary"
-            style={{ 
-              marginTop: '12px',
-              opacity: (loading || !newComment.trim()) ? 0.6 : 1,
-              cursor: (loading || !newComment.trim()) ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {loading ? '⏳ Adding...' : 'Add Comment'}
-          </button>
-        </div>
+        {isGuest ? (
+          <div style={{ 
+            padding: '16px', 
+            backgroundColor: '#fff3cd', 
+            border: '1px solid #ffc107',
+            borderRadius: '8px',
+            color: '#856404',
+            marginBottom: '20px'
+          }}>
+            <p style={{ margin: '0 0 12px 0', fontWeight: '500' }}>
+              🔒 Please log in to leave a comment
+            </p>
+            <button
+              onClick={() => navigate('/login')}
+              className="action-button action-button-primary"
+              style={{ padding: '8px 16px', fontSize: '0.9rem' }}
+            >
+              Log In
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginBottom: '20px' }}>
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment..."
+              rows={4}
+              className="form-input"
+              style={{ 
+                resize: 'vertical',
+                fontFamily: 'inherit',
+                minHeight: '100px'
+              }}
+            />
+            <button
+              onClick={handleAddComment}
+              disabled={loading || !newComment.trim()}
+              className="action-button action-button-primary"
+              style={{ 
+                marginTop: '12px',
+                opacity: (loading || !newComment.trim()) ? 0.6 : 1,
+                cursor: (loading || !newComment.trim()) ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {loading ? '⏳ Adding...' : 'Add Comment'}
+            </button>
+          </div>
+        )}
         <div>
           {comments.length === 0 ? (
             <p style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>

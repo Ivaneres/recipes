@@ -24,10 +24,10 @@ function stripHtml(html: string): string {
 }
 
 export default function RecipeList() {
+  const { isGuest } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const { isAdmin } = useAuth();
 
   useEffect(() => {
     fetchRecipes();
@@ -66,6 +66,7 @@ export default function RecipeList() {
         }
         .recipe-card:hover {
           transform: translateY(-4px);
+          border-color: #007bff;
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
         }
         .recipe-card-image {
@@ -190,7 +191,7 @@ export default function RecipeList() {
               Discover and manage your favorite recipes
             </p>
           </div>
-          {isAdmin && (
+          {!isGuest && (
             <div style={{ 
               display: 'flex', 
               gap: '12px',

@@ -6,16 +6,11 @@ import { sharedStyles } from '../utils/styles';
 
 export default function RecipeImport() {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
   const [url, setUrl] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [importedRecipe, setImportedRecipe] = useState<any>(null);
-
-  if (!isAdmin) {
-    navigate('/recipes');
-    return null;
-  }
 
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +19,7 @@ export default function RecipeImport() {
     setImportedRecipe(null);
 
     try {
-      const response = await api.post(`/recipes/import?url=${encodeURIComponent(url)}`);
+      const response = await api.post(`/recipes/import?url=${encodeURIComponent(url)}&is_private=${isPrivate}`);
       setImportedRecipe(response.data);
       // Navigate to the imported recipe after a short delay
       setTimeout(() => {
@@ -83,6 +78,23 @@ export default function RecipeImport() {
               disabled={loading}
               className="form-input"
             />
+          </div>
+
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={isPrivate}
+                onChange={(e) => setIsPrivate(e.target.checked)}
+                style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+              />
+              <span className="form-label" style={{ margin: 0 }}>
+                Make this recipe private (only visible to you)
+              </span>
+            </label>
+            <p style={{ marginTop: '8px', fontSize: '0.875rem', color: '#666', marginLeft: '32px' }}>
+              Private recipes will only be visible to you and won't appear in other users' recipe lists.
+            </p>
           </div>
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>

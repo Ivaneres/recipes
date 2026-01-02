@@ -1,9 +1,9 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from app.database import get_db
-from app.api.dependencies import get_current_user, get_current_admin_user
+from app.api.dependencies import get_current_user, get_current_admin_user, get_current_user_optional
 from app.models.user import User
 from app.models.recipe import Recipe, RecipeTag
 from app.schemas.recipe import RecipeCreate, RecipeUpdate, RecipeResponse
@@ -19,10 +19,23 @@ def get_recipes(
     limit: int = 100,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """Get all recipes (with optional search)"""
+    """Get all recipes (with optional search). Private recipes are only visible to their creators. Guests can only see public recipes."""
     query = db.query(Recipe)
+    
+    # Filter out private recipes that don't belong to the current user
+    # If no user (guest), only show public recipes
+    if current_user:
+        query = query.filter(
+            or_(
+                Recipe.is_private == False,
+                Recipe.created_by == current_user.id
+            )
+        )
+    else:
+        # Guest mode: only public recipes
+        query = query.filter(Recipe.is_private == False)
     
     if search:
         # Search in title, description, and tags
@@ -54,6 +67,7 @@ def get_recipes(
             "cook_time_minutes": recipe.cook_time_minutes,
             "servings": recipe.servings,
             "source_url": recipe.source_url,
+            "is_private": recipe.is_private,
             "created_by": recipe.created_by,
             "created_at": recipe.created_at,
             "updated_at": recipe.updated_at,
@@ -67,15 +81,24 @@ def get_recipes(
 def get_recipe(
     recipe_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """Get a single recipe by ID"""
+    """Get a single recipe by ID. Private recipes are only accessible to their creators. Guests can only access public recipes."""
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Recipe not found"
         )
+    
+    # Check if recipe is private and user is not the creator
+    if recipe.is_private:
+        if not current_user or recipe.created_by != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Recipe not found"
+            )
+    
     recipe_dict = {
         "id": recipe.id,
         "title": recipe.title,
@@ -87,6 +110,7 @@ def get_recipe(
         "cook_time_minutes": recipe.cook_time_minutes,
         "servings": recipe.servings,
         "source_url": recipe.source_url,
+        "is_private": recipe.is_private,
         "created_by": recipe.created_by,
         "created_at": recipe.created_at,
         "updated_at": recipe.updated_at,
@@ -99,9 +123,9 @@ def get_recipe(
 def create_recipe(
     recipe_data: RecipeCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Create a new recipe (Admin only)"""
+    """Create a new recipe (All authenticated users)"""
     # Process ingredients
     ingredients_data = None
     if recipe_data.ingredients:
@@ -119,6 +143,7 @@ def create_recipe(
         cook_time_minutes=recipe_data.cook_time_minutes,
         servings=recipe_data.servings,
         source_url=str(recipe_data.source_url) if recipe_data.source_url else None,
+        is_private=recipe_data.is_private if recipe_data.is_private is not None else False,
         created_by=current_user.id
     )
     db.add(db_recipe)
@@ -143,6 +168,7 @@ def create_recipe(
         "cook_time_minutes": db_recipe.cook_time_minutes,
         "servings": db_recipe.servings,
         "source_url": db_recipe.source_url,
+        "is_private": db_recipe.is_private,
         "created_by": db_recipe.created_by,
         "created_at": db_recipe.created_at,
         "updated_at": db_recipe.updated_at,
@@ -155,14 +181,22 @@ def update_recipe(
     recipe_id: int,
     recipe_data: RecipeUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Update a recipe (Admin only)"""
+    """Update a recipe (Recipe creator or Admin)"""
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Recipe not found"
+        )
+    
+    # Check if user is the creator or admin
+    from app.models.user import UserRole
+    if recipe.created_by != current_user.id and current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
         )
     
     # Update fields
@@ -185,6 +219,8 @@ def update_recipe(
                 for tag_name in value:
                     tag = RecipeTag(recipe_id=recipe_id, tag=tag_name)
                     db.add(tag)
+        elif field == "is_private":
+            setattr(recipe, field, value if value is not None else False)
         elif field != "tags":
             setattr(recipe, field, value)
     
@@ -201,6 +237,7 @@ def update_recipe(
         "cook_time_minutes": recipe.cook_time_minutes,
         "servings": recipe.servings,
         "source_url": recipe.source_url,
+        "is_private": recipe.is_private,
         "created_by": recipe.created_by,
         "created_at": recipe.created_at,
         "updated_at": recipe.updated_at,
@@ -212,15 +249,24 @@ def update_recipe(
 def delete_recipe(
     recipe_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Delete a recipe (Admin only)"""
+    """Delete a recipe (Recipe creator or Admin)"""
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Recipe not found"
         )
+    
+    # Check if user is the creator or admin
+    from app.models.user import UserRole
+    if recipe.created_by != current_user.id and current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    
     db.delete(recipe)
     db.commit()
     return None
@@ -228,11 +274,12 @@ def delete_recipe(
 
 @router.post("/import", response_model=RecipeResponse, status_code=status.HTTP_201_CREATED)
 async def import_recipe(
-    url: str,
+    url: str = Query(..., description="URL of the recipe to import"),
+    is_private: bool = Query(False, description="Whether the recipe should be private"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Import a recipe from URL (Admin only)"""
+    """Import a recipe from URL (All authenticated users)"""
     recipe_data = await extract_recipe_from_url(url)
     if not recipe_data:
         raise HTTPException(
@@ -250,21 +297,38 @@ async def import_recipe(
         cook_time_minutes=recipe_data.cook_time_minutes,
         servings=recipe_data.servings,
         source_url=str(recipe_data.source_url) if recipe_data.source_url else url,
+        is_private=is_private,
         created_by=current_user.id
     )
     db.add(db_recipe)
     db.commit()
     db.refresh(db_recipe)
     
-    return db_recipe
+    return {
+        "id": db_recipe.id,
+        "title": db_recipe.title,
+        "cover_image": db_recipe.cover_image,
+        "description": db_recipe.description,
+        "ingredients": db_recipe.ingredients,
+        "instructions": db_recipe.instructions,
+        "prep_time_minutes": db_recipe.prep_time_minutes,
+        "cook_time_minutes": db_recipe.cook_time_minutes,
+        "servings": db_recipe.servings,
+        "source_url": db_recipe.source_url,
+        "is_private": db_recipe.is_private,
+        "created_by": db_recipe.created_by,
+        "created_at": db_recipe.created_at,
+        "updated_at": db_recipe.updated_at,
+        "tags": [tag.tag for tag in db_recipe.tags]
+    }
 
 
 @router.post("/upload-image", status_code=status.HTTP_200_OK)
 async def upload_image(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Upload an image file (Admin only)"""
+    """Upload an image file (All authenticated users)"""
     image_path = await save_uploaded_image(file)
     if not image_path:
         raise HTTPException(

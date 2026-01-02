@@ -23,8 +23,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      const isGuest = localStorage.getItem('isGuest') === 'true';
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      if (!isGuest) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

@@ -5,16 +5,21 @@ import type { ReactNode } from 'react';
 interface ProtectedRouteProps {
   children: ReactNode;
   requireAdmin?: boolean;
+  requireAuth?: boolean; // If true, guests cannot access
 }
 
-export default function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
-  const { user, isAdmin, isLoading } = useAuth();
+export default function ProtectedRoute({ children, requireAdmin = false, requireAuth = false }: ProtectedRouteProps) {
+  const { user, isGuest, isAdmin, isLoading } = useAuth();
 
   if (isLoading) {
     return <div>Loading...</div>;
   }
 
-  if (!user) {
+  if (!user && !isGuest) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (requireAuth && isGuest) {
     return <Navigate to="/login" replace />;
   }
 

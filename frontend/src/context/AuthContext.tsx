@@ -12,8 +12,10 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
+  isGuest: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
+  loginAsGuest: () => void;
   logout: () => void;
   isAdmin: boolean;
   isLoading: boolean;
@@ -24,15 +26,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [isGuest, setIsGuest] = useState<boolean>(localStorage.getItem('isGuest') === 'true');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (token) {
+    if (isGuest) {
+      // Set guest user
+      setUser({ id: 0, username: 'Guest', email: '', role: 'reader' });
+      setIsLoading(false);
+    } else if (token) {
       fetchUser();
     } else {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, isGuest]);
 
   const fetchUser = async () => {
     try {
@@ -59,10 +66,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await login(username, password);
   };
 
+  const loginAsGuest = () => {
+    localStorage.setItem('isGuest', 'true');
+    localStorage.removeItem('token');
+    setIsGuest(true);
+    setToken(null);
+    setUser({ id: 0, username: 'Guest', email: '', role: 'reader' });
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('isGuest');
     setToken(null);
     setUser(null);
+    setIsGuest(false);
   };
 
   const isAdmin = user?.role === 'admin';
@@ -72,8 +89,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       value={{
         user,
         token,
+        isGuest,
         login,
         register,
+        loginAsGuest,
         logout,
         isAdmin,
         isLoading,
