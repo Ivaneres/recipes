@@ -1,0 +1,92 @@
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import api from '../services/api';
+
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  role: 'admin' | 'reader';
+}
+
+interface AuthContextType {
+  user: User | null;
+  token: string | null;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string) => Promise<void>;
+  logout: () => void;
+  isAdmin: boolean;
+  isLoading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (token) {
+      fetchUser();
+    } else {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  const fetchUser = async () => {
+    try {
+      const response = await api.get('/auth/me');
+      setUser(response.data);
+    } catch (error) {
+      localStorage.removeItem('token');
+      setToken(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const login = async (username: string, password: string) => {
+    const response = await api.post('/auth/login', { username, password });
+    const { access_token } = response.data;
+    localStorage.setItem('token', access_token);
+    setToken(access_token);
+    await fetchUser();
+  };
+
+  const register = async (username: string, email: string, password: string) => {
+    await api.post('/auth/register', { username, email, password });
+    await login(username, password);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+  };
+
+  const isAdmin = user?.role === 'admin';
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        login,
+        register,
+        logout,
+        isAdmin,
+        isLoading,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
