@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import { sharedStyles } from '../utils/styles';
 
 interface MealPlan {
@@ -29,8 +28,6 @@ interface MealPlanSummary {
 }
 
 export default function MealPlans() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [newMealPlanName, setNewMealPlanName] = useState('');

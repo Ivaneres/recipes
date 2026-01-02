@@ -90,7 +90,7 @@ export default function RecipeEdit() {
     setIngredients([...ingredients, { name: '', quantity: undefined, unit: '' }]);
   };
 
-  const updateIngredient = (index: number, field: keyof Ingredient, value: string | number) => {
+  const updateIngredient = (index: number, field: keyof Ingredient, value: string | number | undefined) => {
     const updated = [...ingredients];
     updated[index] = { ...updated[index], [field]: value };
     setIngredients(updated);

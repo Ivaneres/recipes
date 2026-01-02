@@ -160,7 +160,7 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
           backgroundColor: '#f8f9fa',
           borderRadius: '4px 4px 0 0',
         }}
-        onClick={(e) => {
+        onClick={() => {
           // Focus editor when clicking toolbar
           if (editor) {
             editor.commands.focus();
