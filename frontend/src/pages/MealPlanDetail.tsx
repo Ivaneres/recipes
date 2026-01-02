@@ -28,7 +28,6 @@ interface MealPlanSummary {
 
 export default function MealPlanDetail() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
   const [summary, setSummary] = useState<MealPlanSummary | null>(null);
   const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
