@@ -15,7 +15,9 @@ describe('api', () => {
   })
 
   it('has request and response interceptors registered', () => {
-    expect(api.interceptors.request.handlers.length).toBeGreaterThan(0)
-    expect(api.interceptors.response.handlers.length).toBeGreaterThan(0)
+    const requestHandlers = (api.interceptors.request as unknown as { handlers: unknown[] }).handlers
+    const responseHandlers = (api.interceptors.response as unknown as { handlers: unknown[] }).handlers
+    expect(requestHandlers.length).toBeGreaterThan(0)
+    expect(responseHandlers.length).toBeGreaterThan(0)
   })
 })

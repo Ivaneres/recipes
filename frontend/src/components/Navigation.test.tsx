@@ -21,7 +21,7 @@ describe('Navigation', () => {
       user: { id: 1, username: 'alice', email: 'a@b.com', role: 'reader' },
       isGuest: false,
       logout: vi.fn(),
-    } as ReturnType<typeof useAuth>)
+    } as unknown as ReturnType<typeof useAuth>)
   })
 
   it('renders Home and Recipes links', () => {
@@ -47,7 +47,7 @@ describe('Navigation', () => {
       user: { id: 1, username: 'alice', email: 'a@b.com', role: 'reader' },
       isGuest: false,
       logout: mockLogout,
-    } as ReturnType<typeof useAuth>)
+    } as unknown as ReturnType<typeof useAuth>)
     renderNav()
     await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
     expect(mockLogout).toHaveBeenCalled()
@@ -60,7 +60,7 @@ describe('Navigation as guest', () => {
       user: { id: 0, username: 'Guest', email: '', role: 'reader' },
       isGuest: true,
       logout: vi.fn(),
-    } as ReturnType<typeof useAuth>)
+    } as unknown as ReturnType<typeof useAuth>)
   })
 
   it('does not render Meal Plans and shows Guest and Login button', () => {
@@ -77,7 +77,7 @@ describe('Navigation on login page', () => {
       user: null,
       isGuest: false,
       logout: vi.fn(),
-    } as ReturnType<typeof useAuth>)
+    } as unknown as ReturnType<typeof useAuth>)
   })
 
   it('renders nothing on /login', () => {
