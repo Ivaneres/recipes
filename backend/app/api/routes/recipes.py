@@ -6,9 +6,20 @@ from app.database import get_db
 from app.api.dependencies import get_current_user, get_current_admin_user, get_current_user_optional
 from app.models.user import User
 from app.models.recipe import Recipe, RecipeTag
-from app.schemas.recipe import RecipeCreate, RecipeUpdate, RecipeResponse
-from app.services.image_service import save_uploaded_image
-from app.services.recipe_extractor import extract_recipe_from_url
+from app.schemas.recipe import (
+    RecipeCreate,
+    RecipeUpdate,
+    RecipeResponse,
+    ParseIngredientsRequest,
+    ImportConfirmRequest,
+    Ingredient,
+)
+from app.services.image_service import save_uploaded_image, save_image_from_url
+from app.services.recipe_extractor import (
+    extract_recipe_from_url,
+    extract_recipe_preview_from_url,
+    parse_ingredient_lines,
+)
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
@@ -270,6 +281,83 @@ def delete_recipe(
     db.delete(recipe)
     db.commit()
     return None
+
+
+@router.get("/import/preview", status_code=status.HTTP_200_OK)
+async def import_preview(
+    url: str = Query(..., description="URL of the recipe to preview"),
+    current_user: User = Depends(get_current_user),
+):
+    """Fetch URL and return parsed recipe plus raw ingredient lines and image URLs for the preview screen."""
+    preview = await extract_recipe_preview_from_url(url)
+    if not preview:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not extract recipe from URL",
+        )
+    return preview
+
+
+@router.post("/import/parse-ingredients", status_code=status.HTTP_200_OK)
+def import_parse_ingredients(
+    body: ParseIngredientsRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Re-parse raw ingredient lines with the given quantity pattern. Returns list of Ingredient."""
+    ingredients = parse_ingredient_lines(body.raw_lines, body.pattern)
+    return {"ingredients": [ing.model_dump() for ing in ingredients]}
+
+
+@router.post("/import/confirm", response_model=RecipeResponse, status_code=status.HTTP_201_CREATED)
+async def import_confirm(
+    body: ImportConfirmRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create recipe from preview payload. Optionally download cover image from URL."""
+    recipe_data = body.recipe
+    cover_path = None
+    if body.cover_image_url:
+        cover_path = await save_image_from_url(body.cover_image_url)
+    ingredients_json = None
+    if recipe_data.ingredients:
+        ingredients_json = [
+            ing.model_dump() if isinstance(ing, Ingredient) else ing
+            for ing in recipe_data.ingredients
+        ]
+    db_recipe = Recipe(
+        title=recipe_data.title,
+        description=recipe_data.description,
+        ingredients=ingredients_json,
+        instructions=recipe_data.instructions,
+        prep_time_minutes=recipe_data.prep_time_minutes,
+        cook_time_minutes=recipe_data.cook_time_minutes,
+        servings=recipe_data.servings,
+        source_url=str(recipe_data.source_url) if recipe_data.source_url else None,
+        cover_image=cover_path,
+        is_private=body.is_private,
+        created_by=current_user.id,
+    )
+    db.add(db_recipe)
+    db.commit()
+    db.refresh(db_recipe)
+    return {
+        "id": db_recipe.id,
+        "title": db_recipe.title,
+        "cover_image": db_recipe.cover_image,
+        "description": db_recipe.description,
+        "ingredients": db_recipe.ingredients,
+        "instructions": db_recipe.instructions,
+        "prep_time_minutes": db_recipe.prep_time_minutes,
+        "cook_time_minutes": db_recipe.cook_time_minutes,
+        "servings": db_recipe.servings,
+        "source_url": db_recipe.source_url,
+        "is_private": db_recipe.is_private,
+        "created_by": db_recipe.created_by,
+        "created_at": db_recipe.created_at,
+        "updated_at": db_recipe.updated_at,
+        "tags": [tag.tag for tag in db_recipe.tags],
+    }
 
 
 @router.post("/import", response_model=RecipeResponse, status_code=status.HTTP_201_CREATED)

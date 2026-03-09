@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import UploadFile
 from PIL import Image
 import aiofiles
+import httpx
 from app.config import settings
 
 
@@ -51,6 +52,35 @@ async def save_uploaded_image(file: UploadFile) -> Optional[str]:
     
     # Return relative path
     return f"/uploads/{filename}"
+
+
+async def save_image_from_url(image_url: str) -> Optional[str]:
+    """Download image from URL and save to uploads; return relative path or None."""
+    if not image_url or not image_url.startswith("http"):
+        return None
+    ensure_upload_dir()
+    ext = Path(image_url).suffix.lower().split("?")[0]
+    if ext not in settings.allowed_image_extensions:
+        ext = ".jpg"
+    filename = f"{uuid.uuid4()}{ext}"
+    file_path = Path(settings.upload_dir) / filename
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(image_url, timeout=15.0, follow_redirects=True)
+            response.raise_for_status()
+            content = response.content
+        async with aiofiles.open(file_path, "wb") as f:
+            await f.write(content)
+        with Image.open(file_path) as img:
+            img.verify()
+        return f"/uploads/{filename}"
+    except Exception:
+        if file_path.exists():
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+        return None
 
 
 def get_image_url(image_path: str) -> str:

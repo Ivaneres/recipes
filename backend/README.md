@@ -29,6 +29,22 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 The API will be available at `http://localhost:8000`
 API documentation at `http://localhost:8000/docs`
 
+## Testing
+
+Tests use an in-memory SQLite database (the real DB is never touched). Install test dependencies (included in `requirements.txt`) and run:
+
+```bash
+source venv/bin/activate
+pip install -r requirements.txt   # includes pytest, pytest-cov, httpx
+pytest
+```
+
+Or with coverage:
+
+```bash
+pytest --cov=app --cov-report=term-missing
+```
+
 ## Project Structure
 
 - `app/main.py` - FastAPI application entry point

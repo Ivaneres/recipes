@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = "your-secret-key-change-in-production"
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 10080  # 7 days (can be overridden via ACCESS_TOKEN_EXPIRE_MINUTES env var)
+    # Token expiry: default 7 days so logins persist across sessions (override with ACCESS_TOKEN_EXPIRE_MINUTES in .env)
+    access_token_expire_minutes: int = 10080  # 7 days
     
     # File Upload
     upload_dir: str = "./uploads"

@@ -349,15 +349,29 @@ export default function RecipeDetail() {
       {recipe.instructions && (
         <div className="recipe-section">
           <h2>Instructions</h2>
-          <div 
-            className="recipe-detail" 
-            style={{ 
-              color: '#213547',
-              lineHeight: '1.8',
-              fontSize: '1.05rem'
-            }} 
-            dangerouslySetInnerHTML={{ __html: fixImageUrls(recipe.instructions) }} 
-          />
+          {/<[a-z][\s\S]*>/i.test(recipe.instructions) ? (
+            <div
+              className="recipe-detail"
+              style={{
+                color: '#213547',
+                lineHeight: '1.8',
+                fontSize: '1.05rem',
+              }}
+              dangerouslySetInnerHTML={{ __html: fixImageUrls(recipe.instructions) }}
+            />
+          ) : (
+            <div
+              className="recipe-detail"
+              style={{
+                color: '#213547',
+                lineHeight: '1.8',
+                fontSize: '1.05rem',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {recipe.instructions}
+            </div>
+          )}
         </div>
       )}
 

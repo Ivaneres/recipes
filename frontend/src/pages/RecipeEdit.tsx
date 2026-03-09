@@ -6,6 +6,29 @@ import RichTextEditor from '../components/RichTextEditor';
 import { sharedStyles } from '../utils/styles';
 import { getImageUrl } from '../utils/imageUrl';
 
+/** If instructions are plain text (e.g. from import), convert newlines to HTML so the rich editor preserves them on save. */
+function instructionsForEditor(instructions: string): string {
+  if (!instructions?.trim()) return instructions ?? '';
+  const trimmed = instructions.trim();
+  if (/<[a-z][\s\S]*>/i.test(trimmed)) return trimmed;
+  const escape = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  const paragraphs = trimmed.split(/\n\n+/);
+  const html = paragraphs
+    .map((p) => {
+      const lineBreaks = p.split(/\n/).map((line) => escape(line)).join('<br>');
+      return lineBreaks ? `<p>${lineBreaks}</p>` : '';
+    })
+    .filter(Boolean)
+    .join('');
+  return html || '<p></p>';
+}
+
 interface Ingredient {
   name: string;
   quantity?: number;
@@ -56,7 +79,7 @@ export default function RecipeEdit() {
       setCoverImage(recipe.cover_image || null);
       setDescription(recipe.description || '');
       setIngredients(recipe.ingredients || []);
-      setInstructions(recipe.instructions || '');
+      setInstructions(instructionsForEditor(recipe.instructions || ''));
       setPrepTime(recipe.prep_time_minutes || '');
       setCookTime(recipe.cook_time_minutes || '');
       setServings(recipe.servings || '');
@@ -195,6 +218,7 @@ export default function RecipeEdit() {
               required
               className="form-input"
               placeholder="Enter recipe title"
+              data-testid="recipe-title"
             />
           </div>
 
@@ -312,6 +336,7 @@ export default function RecipeEdit() {
                 type="button"
                 onClick={addIngredient}
                 className="action-button action-button-success"
+                data-testid="add-ingredient"
               >
                 + Add Ingredient
               </button>
@@ -458,6 +483,7 @@ export default function RecipeEdit() {
             type="submit"
             disabled={loading}
             className="action-button action-button-primary"
+            data-testid="recipe-submit"
             style={{ 
               opacity: loading ? 0.6 : 1,
               cursor: loading ? 'not-allowed' : 'pointer'

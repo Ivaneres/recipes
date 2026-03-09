@@ -1,0 +1,7 @@
+- Make the user repeat their password on the frontend when signing up, and verify the passwords match
+- Rework recipe management:
+    - Allow normal, non-admin users to create and import recipes
+    - Introduce public/private flag for recipes. Expose this to users when they are creating or importing recipes. Recipes that are marked private should only be visible to the user that created it (this includes access directly via the URL)
+- Add frontend-only scaling for the ingredients, which allows any user to scale the portions of the recipe.
+- Remove the background from the top banner (the one containing home, recipes, meal plans, logout). Instead separate it from the main section with an "underline" style border
+- Make the recipe tile borders slightly more pronounced

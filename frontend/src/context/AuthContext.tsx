@@ -24,9 +24,10 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  // Persist login: token and guest flag are stored in localStorage so they survive page refresh and browser close
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [isGuest, setIsGuest] = useState<boolean>(localStorage.getItem('isGuest') === 'true');
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [isGuest, setIsGuest] = useState<boolean>(() => localStorage.getItem('isGuest') === 'true');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -56,8 +57,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (username: string, password: string) => {
     const response = await api.post('/auth/login', { username, password });
     const { access_token } = response.data;
+    localStorage.removeItem('isGuest');
     localStorage.setItem('token', access_token);
     setToken(access_token);
+    setIsGuest(false);
     await fetchUser();
   };
 
