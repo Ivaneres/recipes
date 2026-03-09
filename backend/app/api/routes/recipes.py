@@ -325,6 +325,8 @@ async def import_confirm(
             ing.model_dump() if isinstance(ing, Ingredient) else ing
             for ing in recipe_data.ingredients
         ]
+    # Prefer recipe.is_private from the preview payload so user adjustments in the UI are respected
+    is_private = recipe_data.is_private if recipe_data.is_private is not None else body.is_private
     db_recipe = Recipe(
         title=recipe_data.title,
         description=recipe_data.description,
@@ -335,7 +337,7 @@ async def import_confirm(
         servings=recipe_data.servings,
         source_url=str(recipe_data.source_url) if recipe_data.source_url else None,
         cover_image=cover_path,
-        is_private=body.is_private,
+        is_private=is_private,
         created_by=current_user.id,
     )
     db.add(db_recipe)
