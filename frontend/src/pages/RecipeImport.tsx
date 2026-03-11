@@ -46,6 +46,10 @@ export default function RecipeImport() {
   const [servings, setServings] = useState<number | ''>('');
   const [selectedCoverUrl, setSelectedCoverUrl] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  // Raw ingredients text: from extractor (editable) or pasted by user. Re-parsing replaces the table.
+  const [rawIngredientText, setRawIngredientText] = useState('');
+  const [parsePattern, setParsePattern] = useState<'quantity_unit_name' | 'quantity_only' | 'name_only'>('quantity_unit_name');
+  const [parsingIngredients, setParsingIngredients] = useState(false);
 
   const handleFetchPreview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +64,7 @@ export default function RecipeImport() {
       setTitle(data.recipe.title || '');
       setDescription(data.recipe.description ?? '');
       setIngredients(data.recipe.ingredients ?? []);
+      setRawIngredientText((data.raw_ingredient_lines ?? []).join('\n'));
       setInstructions(data.instructions_raw ?? data.recipe.instructions ?? '');
       setPrepTime(data.recipe.prep_time_minutes ?? '');
       setCookTime(data.recipe.cook_time_minutes ?? '');
@@ -93,6 +98,31 @@ export default function RecipeImport() {
 
   const addIngredient = () => {
     setIngredients([...ingredients, { name: '' }]);
+  };
+
+  const handleReparseIngredients = async () => {
+    const lines = rawIngredientText
+      .split(/\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length === 0) {
+      setIngredients([]);
+      return;
+    }
+    setParsingIngredients(true);
+    setError('');
+    try {
+      const response = await api.post<{ ingredients: Ingredient[] }>('/recipes/import/parse-ingredients', {
+        raw_lines: lines,
+        pattern: parsePattern,
+      });
+      setIngredients(response.data.ingredients ?? []);
+    } catch (err: any) {
+      console.error('Re-parse ingredients:', err);
+      setError(err.response?.data?.detail || 'Failed to re-parse ingredients.');
+    } finally {
+      setParsingIngredients(false);
+    }
   };
 
   const handleImportConfirm = async () => {
@@ -280,7 +310,42 @@ export default function RecipeImport() {
 
             <h3 style={{ margin: '0 0 12px 0', fontSize: '1.2rem' }}>Ingredients</h3>
             <p style={{ color: '#666', fontSize: '0.875rem', marginBottom: '12px' }}>
-              Edit quantity, unit, or name. Add or remove rows as needed.
+              Edit quantity, unit, or name in the table below. If parsing is wrong, adjust the raw text (remove junk lines or paste your own list) and click Re-parse.
+            </p>
+            <div style={{ marginBottom: '16px' }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: '6px' }}>Raw ingredients (one per line)</label>
+              <textarea
+                value={rawIngredientText}
+                onChange={(e) => setRawIngredientText(e.target.value)}
+                className="form-input"
+                rows={6}
+                placeholder="Paste ingredients here, one per line (e.g. 200 g flour, 1 tsp salt). Remove header lines if the parser started in the wrong place, then click Re-parse."
+                style={{ resize: 'vertical', width: '100%', fontFamily: 'inherit', fontSize: '0.9rem' }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
+                <select
+                  value={parsePattern}
+                  onChange={(e) => setParsePattern(e.target.value as 'quantity_unit_name' | 'quantity_only' | 'name_only')}
+                  className="form-input"
+                  style={{ width: 'auto', minWidth: '180px', margin: 0 }}
+                >
+                  <option value="quantity_unit_name">Quantity + unit + name</option>
+                  <option value="quantity_only">Quantity + name (no unit)</option>
+                  <option value="name_only">Name only</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={handleReparseIngredients}
+                  disabled={parsingIngredients}
+                  className="action-button action-button-primary"
+                  style={{ padding: '8px 16px' }}
+                >
+                  {parsingIngredients ? '⏳ Re-parsing…' : 'Re-parse ingredients'}
+                </button>
+              </div>
+            </div>
+            <p style={{ color: '#666', fontSize: '0.875rem', marginBottom: '12px' }}>
+              Parsed list — edit, add, or remove rows as needed.
             </p>
 
             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
@@ -362,14 +427,14 @@ export default function RecipeImport() {
 
             <h3 style={{ margin: '0 0 12px 0', fontSize: '1.2rem' }}>Instructions</h3>
             <p style={{ color: '#666', fontSize: '0.875rem', marginBottom: '8px' }}>
-              Trim or edit the instructions. You can remove lines at the start or end that don’t belong.
+              If we captured the wrong section (e.g. abbreviated instead of full), trim the text below to the start and end you want, or paste the full method. You can delete lines at the top or bottom that don’t belong.
             </p>
             <textarea
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               className="form-input"
-              rows={8}
-              placeholder="Instructions"
+              rows={10}
+              placeholder="Instructions / method"
               style={{ resize: 'vertical' }}
             />
 

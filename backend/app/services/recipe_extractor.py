@@ -1,4 +1,5 @@
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
+import html
 import httpx
 from bs4 import BeautifulSoup
 import json
@@ -7,12 +8,47 @@ from urllib.parse import urljoin
 from recipe_scrapers import scrape_me
 from app.schemas.recipe import RecipeCreate, Ingredient
 
-# Browser-like headers so recipe sites (e.g. Michelin Guide) don't return 403 Forbidden
+# Browser-like headers so recipe sites (e.g. Michelin Guide, Serious Eats) don't return 403 Forbidden.
+# Include Sec-Fetch-* and Accept-Encoding so the request resembles a normal browser navigation.
 DEFAULT_HTTP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
+
+
+# Phrases that indicate article prose rather than recipe steps (used to auto-trim instructions_raw for new sites)
+_INSTRUCTIONS_ARTICLE_PHRASES = (
+    "family dining table",
+    "one MICHELIN star",
+    "is a starring dish",
+    "Written by",
+    "Images are courtesy",
+    "Share\n",
+)
+
+
+def _trim_instructions_raw_if_article(text: str, max_len_before_trim: int = 3500) -> str:
+    """
+    If text is long and contains article-like phrases, trim to the first numbered step (e.g. "1. ").
+    Helps avoid sending full article content as instructions_raw for new sites with similar structure.
+    """
+    if not text or len(text) < max_len_before_trim:
+        return text
+    lower = text.lower()
+    if not any(phrase.lower() in lower for phrase in _INSTRUCTIONS_ARTICLE_PHRASES):
+        return text
+    # Find first "1. " (start of method steps) and take from there
+    m = re.search(r"(?:^|\n)\s*1\.\s+\w", text)
+    if m:
+        return text[m.start():].lstrip()
+    return text
 
 
 def _is_likely_form_or_ui_junk(text: str) -> bool:
@@ -119,61 +155,165 @@ def _extract_from_structured_data(soup: BeautifulSoup, url: str) -> Optional[Rec
     return recipe
 
 
+def _normalize_ld_json_to_recipe_candidates(data) -> List[dict]:
+    """Turn parsed JSON-LD into a list of candidate Recipe objects (handles @graph, top-level list, or single object)."""
+    if not data:
+        return []
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        if data.get('@type') == 'Recipe' or 'Recipe' in str(data.get('@type', [])):
+            return [data]
+        graph = data.get('@graph')
+        if isinstance(graph, list):
+            return graph
+        return []
+    return []
+
+
+def _normalize_structured_text(text: Optional[str]) -> str:
+    """Unescape HTML entities in text from JSON-LD (e.g. &frac12; &amp;) so we store clean text."""
+    if not text or not isinstance(text, str):
+        return ""
+    return html.unescape(text).strip()
+
+
+def _ingredient_line_from_structured(ing: Any) -> Optional[str]:
+    """Extract a single ingredient line from schema.org recipeIngredient (string or Ingredient object)."""
+    if isinstance(ing, str):
+        return _normalize_structured_text(ing) or None
+    if isinstance(ing, dict):
+        name = ing.get("name") or ing.get("text")
+        if name:
+            return _normalize_structured_text(str(name))
+        # Fallback: join values that look like a line
+        parts = [str(v) for k, v in ing.items() if k not in ("@type", "@context") and v]
+        if parts:
+            return _normalize_structured_text(" ".join(parts))
+    return None
+
+
+def _instruction_steps_from_structured(recipe_instructions: Any) -> List[str]:
+    """
+    Extract ordered list of instruction step strings from schema.org recipeInstructions.
+    Handles: single string; list of strings; list of HowToStep (dict with 'text');
+    HowToSection with hasPart / itemListElement / steps (flattened).
+    """
+    steps: List[str] = []
+
+    def add_step(text: str) -> None:
+        t = _normalize_structured_text(text)
+        if t:
+            steps.append(t)
+
+    def process_item(item: Any) -> None:
+        if isinstance(item, str):
+            add_step(item)
+            return
+        if not isinstance(item, dict):
+            return
+        # HowToStep
+        text = item.get("text")
+        if text:
+            add_step(text)
+            return
+        # HowToSection: flatten hasPart, itemListElement, or steps
+        for key in ("hasPart", "itemListElement", "steps"):
+            part_list = item.get(key)
+            if isinstance(part_list, list):
+                for sub in part_list:
+                    process_item(sub)
+                return
+            if isinstance(part_list, dict) and part_list.get("text"):
+                add_step(part_list["text"])
+                return
+        # ItemList with listItem
+        list_items = item.get("itemListElement") or item.get("listItem")
+        if isinstance(list_items, list):
+            for li in list_items:
+                if isinstance(li, dict) and "item" in li:
+                    process_item(li["item"])
+                else:
+                    process_item(li)
+            return
+
+    if recipe_instructions is None:
+        return steps
+    if isinstance(recipe_instructions, str):
+        # Single string: split by double newline or single newline and keep non-empty
+        for block in re.split(r"\n\s*\n", recipe_instructions):
+            block = _normalize_structured_text(block)
+            if block:
+                steps.append(block)
+        if not steps and recipe_instructions.strip():
+            steps.append(_normalize_structured_text(recipe_instructions))
+        return steps
+    if isinstance(recipe_instructions, dict):
+        # Single HowToStep or HowToSection
+        process_item(recipe_instructions)
+        return steps
+    if isinstance(recipe_instructions, list):
+        for item in recipe_instructions:
+            process_item(item)
+        return steps
+    return steps
+
+
 def _extract_from_structured_data_with_raw(soup: BeautifulSoup, url: str) -> Tuple[Optional[RecipeCreate], List[str]]:
     """Extract recipe from JSON-LD structured data; returns (recipe, raw_ingredient_lines)."""
     try:
         json_scripts = soup.find_all('script', type='application/ld+json')
         for script in json_scripts:
             try:
-                data = json.loads(script.string)
-                if isinstance(data, list):
-                    data = data[0] if data else {}
-                if data.get('@type') != 'Recipe' and 'Recipe' not in str(data.get('@type', [])):
-                    continue
-                title = data.get('name', '')
-                description = data.get('description', '')
-                if description and _is_likely_form_or_ui_junk(description):
-                    description = ''
-                ingredients_list = []
-                recipe_ingredients = data.get('recipeIngredient', [])
-                raw_lines = []
-                if isinstance(recipe_ingredients, list):
-                    for ing in recipe_ingredients:
-                        if isinstance(ing, str):
-                            raw_lines.append(ing)
-                            ingredients_list.append(Ingredient(name=ing))
-                instructions = None
-                recipe_instructions = data.get('recipeInstructions', [])
-                if isinstance(recipe_instructions, list):
-                    instruction_parts = []
-                    for step in recipe_instructions:
-                        if isinstance(step, dict):
-                            text = step.get('text', '')
-                            if text:
-                                instruction_parts.append(text)
-                        elif isinstance(step, str):
-                            instruction_parts.append(step)
-                    if instruction_parts:
-                        instructions = '\n'.join(f"{i+1}. {step}" for i, step in enumerate(instruction_parts))
-                prep_time = _parse_duration(data.get('prepTime'))
-                cook_time = _parse_duration(data.get('cookTime'))
-                servings = None
-                recipe_yield = data.get('recipeYield', '')
-                if recipe_yield:
-                    numbers = re.findall(r'\d+', str(recipe_yield))
-                    if numbers:
-                        servings = int(numbers[0])
-                if title:
-                    return (RecipeCreate(
-                        title=title,
-                        description=description,
-                        ingredients=ingredients_list if ingredients_list else None,
-                        instructions=instructions,
-                        prep_time_minutes=prep_time,
-                        cook_time_minutes=cook_time,
-                        servings=servings,
-                        source_url=url
-                    ), raw_lines)
+                raw = json.loads(script.string)
+                candidates = _normalize_ld_json_to_recipe_candidates(raw)
+                for data in candidates:
+                    if not isinstance(data, dict):
+                        continue
+                    if data.get('@type') != 'Recipe' and 'Recipe' not in str(data.get('@type', [])):
+                        continue
+                    title = _normalize_structured_text(data.get('name') or '')
+                    description = _normalize_structured_text(data.get('description') or '')
+                    if description and _is_likely_form_or_ui_junk(description):
+                        description = ''
+                    ingredients_list = []
+                    raw_lines = []
+                    recipe_ingredients = data.get('recipeIngredient')
+                    if isinstance(recipe_ingredients, list):
+                        for ing in recipe_ingredients:
+                            line = _ingredient_line_from_structured(ing)
+                            if line:
+                                raw_lines.append(line)
+                                ingredients_list.append(Ingredient(name=line))
+                    elif isinstance(recipe_ingredients, str):
+                        line = _ingredient_line_from_structured(recipe_ingredients)
+                        if line:
+                            raw_lines.append(line)
+                            ingredients_list.append(Ingredient(name=line))
+                    instruction_parts = _instruction_steps_from_structured(data.get('recipeInstructions'))
+                    instructions = '\n'.join(f"{i+1}. {step}" for i, step in enumerate(instruction_parts)) if instruction_parts else None
+                    prep_time = _parse_duration(data.get('prepTime'))
+                    cook_time = _parse_duration(data.get('cookTime'))
+                    servings = None
+                    recipe_yield = data.get('recipeYield')
+                    if recipe_yield is not None:
+                        yield_str = recipe_yield
+                        if isinstance(recipe_yield, list):
+                            yield_str = str(recipe_yield[0]) if recipe_yield else ''
+                        numbers = re.findall(r'\d+', str(yield_str))
+                        if numbers:
+                            servings = int(numbers[0])
+                    if title:
+                        return (RecipeCreate(
+                            title=title,
+                            description=description,
+                            ingredients=ingredients_list if ingredients_list else None,
+                            instructions=instructions,
+                            prep_time_minutes=prep_time,
+                            cook_time_minutes=cook_time,
+                            servings=servings,
+                            source_url=url
+                        ), raw_lines)
             except (json.JSONDecodeError, KeyError, AttributeError):
                 continue
     except Exception as e:
@@ -297,21 +437,94 @@ def _extract_ingredients_from_heading_lists(container) -> Tuple[List[str], List[
     return (raw_lines, ingredients_list)
 
 
-def _extract_instructions_from_heading_lists(container) -> Optional[str]:
+def _extract_ingredients_from_inline_prose(container) -> Tuple[List[str], List[Ingredient]]:
     """
-    Find "Instructions" (or "Method" / "Steps") section and collect following ol/ul list items
-    or numbered paragraphs. Returns joined steps or None.
+    Extract ingredients when the recipe is in one or a few paragraphs (e.g. Michelin Guide):
+    "Beef Rendang Serves 4 ... 500g beef short ribs ... Ingredients A: 60g shallots ... Method 1. Blend..."
+    Returns (raw_ingredient_lines, ingredients_list).
+    """
+    raw_lines: List[str] = []
+    ingredients_list: List[Ingredient] = []
+    seen: set = set()
+    if not container:
+        return (raw_lines, ingredients_list)
+
+    # Find blocks that look like a recipe block: contain "Ingredients" or "Serves" and quantity patterns
+    ingredient_quantity = re.compile(
+        r'\d+\s*(?:g|gr|kg|ml|tsp|tbsp|cup)s?\s+|\d+\s+(?:lemongrass|kaffir|turmeric|stick|cinnamon|star anise|leaf|leaves)\b',
+        re.IGNORECASE
+    )
+    method_start = re.compile(r'\bMethod\s*\d*[.)]?|\bMethod\s*$', re.IGNORECASE)
+    # Split points: number + unit (g, gr, kg, ml, ...) or number + ingredient word. Use (?<!\d) so we
+    # split only at the start of a number (e.g. before "500g") not in the middle (e.g. before "0g" in "500g").
+    split_before_ingredient = re.compile(
+        r'(?<!\d)(?=\s*(?:\d+\s*(?:g|gr|kg|ml|tsp|tbsp|cup)s?|\d+\s+(?:lemongrass|kaffir|turmeric|stick|cinnamon|star anise|leaf|leaves)\b)\s*)',
+        re.IGNORECASE
+    )
+
+    for block in container.find_all(['p', 'div']):
+        if block.find_parent(['li', 'ul', 'ol']):
+            continue
+        text = (block.get_text() or '').strip()
+        if len(text) < 80 or len(text) > 20000:
+            continue
+        if not ('Ingredients' in text or 'Serves' in text) or not ingredient_quantity.search(text):
+            continue
+        if not method_start.search(text):
+            continue
+        # Take only the part before "Method"
+        method_match = re.search(r'\bMethod\s*\d*[.)]?\s*', text, re.IGNORECASE)
+        if method_match:
+            text = text[:method_match.start()].strip()
+        if len(text) < 20:
+            continue
+        # Normalize section labels so we can split: "Ingredients A:" -> newline, same for B, C, D, "For ground dry spices:"
+        text = re.sub(r'\s+Ingredients\s+[A-Z]\s*:\s*', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'\s+For\s+[^:]+:\s*', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'\s+Ingredients\s+[A-Z]\s+', '\n', text, flags=re.IGNORECASE)
+        # Split into candidate lines (by lookahead for next quantity)
+        parts = split_before_ingredient.split(text)
+        for part in parts:
+            part = part.strip()
+            if not part or len(part) < 3:
+                continue
+            # Must look like an ingredient line: starts with number or fraction
+            if not re.match(r'^[\d½¼¾\u00BC-\u00BE\u2150-\u215E]', part):
+                continue
+            if re.match(r'^(Ingredients|For\s|Method)\s*$', part, re.IGNORECASE):
+                continue
+            if len(part) > 300:
+                continue
+            norm = re.sub(r'\s+', ' ', part.lower())
+            if norm in seen:
+                continue
+            seen.add(norm)
+            raw_lines.append(part)
+            ingredients_list.append(Ingredient(name=part))
+        if len(raw_lines) >= 3:
+            return (raw_lines, ingredients_list)
+        raw_lines.clear()
+        ingredients_list.clear()
+        seen.clear()
+    return ([], [])
+
+
+def _extract_instructions_from_heading_lists(container) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Find "Instructions" (or "Method" / "Steps" / "FULL RECIPE") and collect steps.
+    When multiple sections exist (e.g. "ABBREVIATED RECIPE" and "FULL RECIPE"), prefer the one
+    labeled "full" or "complete", else the longest. Returns (instructions, instructions_raw).
+    instructions_raw is the concatenation of all instruction sections so the user can trim start/end.
     """
     if not container:
-        return None
+        return (None, None)
     heading_tag = re.compile(r'^h[2-6]$', re.IGNORECASE)
     instruction_section = re.compile(r'^\s*Instructions?\b', re.IGNORECASE)
     method_steps = re.compile(r'^\s*(Method|Steps?|Directions?|Procedure)\b', re.IGNORECASE)
-    steps: List[str] = []
+    # RecipeTin Eats etc.: "ABBREVIATED RECIPE" vs "FULL RECIPE"
+    recipe_section = re.compile(r'^\s*(ABBREVIATED\s+RECIPE|FULL\s+RECIPE|Recipe)\b', re.IGNORECASE)
 
     def split_numbered_steps(text: str) -> List[str]:
-        """Split a block like '1. First step. 2. Second step.' into list of steps."""
-        # Split by pattern "digit. " or "digit) " while keeping the step text
         parts = re.split(r'\s*(?=\d+[.)]\s+)', text)
         out = []
         for p in parts:
@@ -323,70 +536,124 @@ def _extract_instructions_from_heading_lists(container) -> Optional[str]:
                 out.append(p)
         return out
 
-    def collect_steps_from_siblings(start) -> None:
-        for sib in start.find_next_siblings():
+    def _is_likely_recipe_step(step_text: str) -> bool:
+        if not step_text or len(step_text) < 8:
+            return False
+        s = step_text.strip()[:100]
+        lower = s.lower()
+        if re.match(r'^(Share|Print|Subscribe|RELATED|Written by|Images? (are|courtesy)|Dining In)\b', s, re.IGNORECASE):
+            return False
+        if 'restaurant' in lower or 'michelin' in lower or 'family dining table' in lower:
+            return False
+        return True
+
+    def collect_one_section_steps_and_raw(start_el) -> Tuple[List[str], str]:
+        """Collect steps and raw text from start_el until next same-level heading. Returns (steps, raw_text)."""
+        steps_list: List[str] = []
+        raw_parts: List[str] = []
+        start_level = _HEADING_LEVEL.get(start_el.name, 6) if start_el.name and heading_tag.match(start_el.name) else 6
+        for sib in start_el.find_next_siblings():
             if sib.name and heading_tag.match(sib.name):
-                break
+                sib_level = _HEADING_LEVEL.get(sib.name, 6)
+                if sib_level <= start_level:
+                    break
             if sib.name in ('ol', 'ul'):
                 for li in sib.find_all('li', recursive=False):
                     text = (li.get_text() or '').strip()
                     if text and len(text) > 10:
-                        text = re.sub(r'^\s*\d+[.)]\s+', '', text).strip() or text
-                        steps.append(text)
+                        text_clean = re.sub(r'^\s*\d+[.)]\s+', '', text).strip() or text
+                        if _is_likely_recipe_step(text_clean):
+                            steps_list.append(text_clean)
+                    raw_parts.append((li.get_text() or '').strip())
             elif sib.name in ('p', 'div'):
                 text = (sib.get_text() or '').strip()
                 if text and len(text) > 15:
                     if re.match(r'^\s*\d+[.)]\s+', text):
-                        steps.append(re.sub(r'^\s*\d+[.)]\s+', '', text).strip() or text)
+                        one = re.sub(r'^\s*\d+[.)]\s+', '', text).strip() or text
+                        if _is_likely_recipe_step(one):
+                            steps_list.append(one)
                     elif re.search(r'\d+[.)]\s+', text):
-                        # Block contains multiple numbered steps (e.g. "Procedure1. ... 2. ...")
-                        steps.extend(split_numbered_steps(text))
+                        for s in split_numbered_steps(text):
+                            if _is_likely_recipe_step(s):
+                                steps_list.append(s)
                     elif len(text) < 500 and not re.match(r'^(The chef|READ|RELEVANT|Written by)', text[:30], re.IGNORECASE):
-                        steps.append(text)
+                        if _is_likely_recipe_step(text):
+                            steps_list.append(text)
+                raw_parts.append(text)
+        raw_text = '\n\n'.join(p for p in raw_parts if p)
+        return (steps_list, raw_text)
 
-    # Pass 1: p/div that is just "Instructions:" (or "Method:", "Steps:")
+    # Pass 1: Michelin-style single block "Method 1. ... 2. ..."
+    steps: List[str] = []
+    instructions_raw_blocks: List[str] = []
+    procedure_pattern = re.compile(r'\b(Procedure|Method)\b.*?\d+[.)]\s+', re.IGNORECASE | re.DOTALL)
     for block in container.find_all(['p', 'div']):
-        text = (block.get_text() or '').strip()
-        if len(text) > 50:
-            continue
-        if not (instruction_section.search(text) or method_steps.search(text)):
-            continue
         if block.find_parent(['li', 'ul', 'ol']):
             continue
-        collect_steps_from_siblings(block)
-        if steps:
-            break
+        text = (block.get_text() or '').strip()
+        if len(text) < 50 or len(text) > 15000:
+            continue
+        match = procedure_pattern.search(text)
+        if match and re.search(r'\d+[.)]\s+\w+', text):
+            after_label = re.search(r'\b(Procedure|Method)\s*.*?(\d+[.)]\s+)', text, re.IGNORECASE | re.DOTALL)
+            text_from_first_step = text[after_label.start(2):] if after_label else text
+            steps = split_numbered_steps(text_from_first_step)
+            if steps:
+                # Use method-only text for instructions_raw so the UI doesn't get article prose
+                steps_joined = '\n\n'.join(f"{i+1}. {s}" for i, s in enumerate(steps))
+                return (steps_joined, text_from_first_step)
 
-    # Pass 2: headings h2–h6 with "Instruction" / "Method" / "Steps" / "Procedure"
-    if not steps:
-        for h in container.find_all(heading_tag):
-            text = (h.get_text() or '').strip()
-            if instruction_section.search(text) or method_steps.search(text):
-                collect_steps_from_siblings(h)
-                if steps:
-                    break
+    # Pass 2: Headings first (so we get multiple sections e.g. ABBREVIATED RECIPE + FULL RECIPE)
+    sections: List[Tuple[str, List[str], str]] = []  # (heading_text, steps, raw_text)
 
-    # Pass 3: block that contains "Procedure" or "Method" followed by numbered steps (e.g. "Procedure1. ... 2. ...")
-    if not steps:
-        procedure_pattern = re.compile(r'\b(Procedure|Method)\b.*\d+[.)]\s+', re.IGNORECASE | re.DOTALL)
+    def add_section(heading_text: str, start_el) -> None:
+        nonlocal sections
+        st, raw = collect_one_section_steps_and_raw(start_el)
+        if st or raw:
+            sections.append((heading_text, st, raw))
+
+    for h in container.find_all(heading_tag):
+        text = (h.get_text() or '').strip()
+        if instruction_section.search(text) or method_steps.search(text) or recipe_section.search(text):
+            add_section(text, h)
+
+    # Pass 3: Fallback – single "Instructions:" or "Method:" block then siblings
+    if not sections:
         for block in container.find_all(['p', 'div']):
+            text = (block.get_text() or '').strip()
+            if len(text) > 50:
+                continue
+            if not (instruction_section.search(text) or method_steps.search(text)):
+                continue
             if block.find_parent(['li', 'ul', 'ol']):
                 continue
-            text = (block.get_text() or '').strip()
-            if len(text) < 50 or len(text) > 15000:
-                continue
-            if procedure_pattern.search(text) and re.search(r'\d+[.)]\s+\w+', text):
-                steps.extend(split_numbered_steps(text))
-                if steps:
-                    break
+            add_section(text[:80], block)
+            break
 
-    if not steps:
-        return None
-    return '\n\n'.join(f"{i+1}. {s}" for i, s in enumerate(steps))
+    if not sections:
+        return (None, None)
+
+    # Prefer section whose heading contains "full" or "complete"; else longest steps; else first
+    def score_section(entry: Tuple[str, List[str], str]) -> Tuple[int, int]:
+        heading, st, _ = entry
+        lower = heading.lower()
+        if 'full' in lower or 'complete' in lower:
+            return (2, len(st))
+        if 'abbreviated' in lower or 'short' in lower:
+            return (0, len(st))
+        return (1, len(st))
+
+    best = max(sections, key=lambda e: score_section(e))
+    best_heading, best_steps, best_raw = best
+    chosen_instructions = '\n\n'.join(f"{i+1}. {s}" for i, s in enumerate(best_steps)) if best_steps else None
+    all_raw = '\n\n---\n\n'.join(
+        f"{h}\n\n{r}" for h, _, r in sections
+    )
+    return (chosen_instructions, all_raw if len(sections) > 1 or not chosen_instructions else (best_raw or all_raw))
 
 
-def _extract_from_html_impl(soup: BeautifulSoup, url: str) -> Tuple[Optional[RecipeCreate], List[str]]:
-    """Generic HTML parsing fallback; returns (recipe, raw_ingredient_lines)."""
+def _extract_from_html_impl(soup: BeautifulSoup, url: str) -> Tuple[Optional[RecipeCreate], List[str], Optional[str]]:
+    """Generic HTML parsing fallback; returns (recipe, raw_ingredient_lines, instructions_raw_override)."""
     try:
         # Try to find title
         title = None
@@ -505,13 +772,22 @@ def _extract_from_html_impl(soup: BeautifulSoup, url: str) -> Tuple[Optional[Rec
                 if heading_ingredients:
                     raw_ingredient_lines = heading_raw
                     ingredients_list = heading_ingredients
+        # Michelin-style: single paragraph with "Ingredients A:", "500g beef", "Method 1. ..."
+        if not ingredients_list:
+            container = soup.find('main') or soup.find('article') or soup.find('body')
+            if container:
+                inline_raw, inline_ingredients = _extract_ingredients_from_inline_prose(container)
+                if inline_ingredients:
+                    raw_ingredient_lines = inline_raw
+                    ingredients_list = inline_ingredients
         
         # Try to find instructions
         instructions = None
+        instructions_raw_override: Optional[str] = None
         instruction_parts = []
         container = soup.find('main') or soup.find('article') or soup.find('body')
         if container:
-            instructions = _extract_instructions_from_heading_lists(container)
+            instructions, instructions_raw_override = _extract_instructions_from_heading_lists(container)
         if not instructions:
             # Look for instruction sections
             # Broad selectors (article p, main p) only add numbered steps to avoid capturing whole article
@@ -685,19 +961,19 @@ def _extract_from_html_impl(soup: BeautifulSoup, url: str) -> Tuple[Optional[Rec
                 cook_time_minutes=cook_time,
                 servings=servings,
                 source_url=url
-            ), raw_ingredient_lines)
+            ), raw_ingredient_lines, instructions_raw_override)
         
-        return (None, [])
+        return (None, [], None)
     except Exception as e:
         print(f"Error in generic HTML extraction: {e}")
         import traceback
         traceback.print_exc()
-        return (None, [])
+        return (None, [], None)
 
 
 def _extract_from_html(soup: BeautifulSoup, url: str) -> Optional[RecipeCreate]:
     """Wrapper for backward compatibility."""
-    recipe, _ = _extract_from_html_impl(soup, url)
+    recipe, _, _ = _extract_from_html_impl(soup, url)
     return recipe
 
 
@@ -899,13 +1175,15 @@ async def extract_recipe_preview_from_url(url: str) -> Optional[Dict]:
 
     image_urls = _get_image_urls_from_soup(soup, url)
 
-    def _preview_payload(recipe: RecipeCreate, raw_lines: List[str], image_urls: List[str]) -> Dict:
-        """Build preview payload with ingredients pre-parsed (default pattern) so user doesn't need to click Apply."""
+    def _preview_payload(recipe: RecipeCreate, raw_lines: List[str], image_urls: List[str], instructions_raw_override: Optional[str] = None) -> Dict:
+        """Build preview payload. instructions_raw_override: when set (e.g. full method block), user can trim start/end."""
+        raw_inst = instructions_raw_override if instructions_raw_override is not None else recipe.instructions
+        raw_inst = _trim_instructions_raw_if_article(raw_inst or "")
         payload = {
             "recipe": recipe.model_dump(),
             "raw_ingredient_lines": raw_lines,
             "image_urls": image_urls,
-            "instructions_raw": recipe.instructions,
+            "instructions_raw": raw_inst,
         }
         if raw_lines:
             parsed = parse_ingredient_lines(raw_lines, "quantity_unit_name")
@@ -917,9 +1195,9 @@ async def extract_recipe_preview_from_url(url: str) -> Optional[Dict]:
     if recipe:
         return _preview_payload(recipe, raw_lines, image_urls)
 
-    recipe, raw_lines = _extract_from_html_impl(soup, url)
+    recipe, raw_lines, instructions_raw_override = _extract_from_html_impl(soup, url)
     if recipe:
-        return _preview_payload(recipe, raw_lines, image_urls)
+        return _preview_payload(recipe, raw_lines, image_urls, instructions_raw_override)
 
     fallback_recipe = _extract_all_text_fallback(soup, url)
     if fallback_recipe:
@@ -974,7 +1252,7 @@ async def extract_recipe_preview_from_url(url: str) -> Optional[Dict]:
 
 # Known measurement units (and common abbreviations). If parsed "unit" isn't here, treat as part of name.
 _MEASUREMENT_UNITS = frozenset({
-    "g", "gram", "grams", "kg", "kilogram", "kilograms",
+    "g", "gr", "gram", "grams", "kg", "kilogram", "kilograms",
     "mg", "ml", "milliliter", "milliliters", "l", "liter", "liters", "litre", "litres",
     "oz", "ounce", "ounces", "lb", "lbs", "pound", "pounds",
     "cup", "cups", "tbsp", "tbs", "tablespoon", "tablespoons",
