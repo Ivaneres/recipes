@@ -476,7 +476,8 @@ export default function RecipeDetail() {
                         setScaleInputValue(factor.toString());
                       }}
                       style={{
-                        padding: '6px 12px',
+                        padding: '10px 16px',
+                        minHeight: '44px',
                         borderRadius: '6px',
                         border: isActive ? '2px solid #007bff' : '1px solid #e0e0e0',
                         background: isActive ? '#e7f3ff' : 'white',

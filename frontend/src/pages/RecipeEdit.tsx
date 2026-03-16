@@ -292,14 +292,14 @@ export default function RecipeEdit() {
             <label className="form-label">Ingredients</label>
             <div>
               {ingredients.map((ing, index) => (
-                <div key={index} style={{ display: 'flex', gap: '12px', marginBottom: '12px', alignItems: 'center' }}>
+                <div key={index} style={{ display: 'flex', gap: '12px', marginBottom: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <input
                     type="number"
                     placeholder="Qty"
                     value={ing.quantity || ''}
                     onChange={(e) => updateIngredient(index, 'quantity', e.target.value ? Number(e.target.value) : undefined)}
                     className="form-input"
-                    style={{ width: '100px' }}
+                    style={{ flex: '0 0 80px', minWidth: 0 }}
                   />
                   <input
                     type="text"
@@ -307,7 +307,7 @@ export default function RecipeEdit() {
                     value={ing.unit || ''}
                     onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
                     className="form-input"
-                    style={{ width: '120px' }}
+                    style={{ flex: '0 0 100px', minWidth: 0 }}
                   />
                   <input
                     type="text"
@@ -316,7 +316,7 @@ export default function RecipeEdit() {
                     onChange={(e) => updateIngredient(index, 'name', e.target.value)}
                     required
                     className="form-input"
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, minWidth: '120px' }}
                   />
                   <button
                     type="button"

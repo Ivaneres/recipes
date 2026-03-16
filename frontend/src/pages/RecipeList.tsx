@@ -250,7 +250,7 @@ export default function RecipeList() {
       ) : (
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', 
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
           gap: '32px'
         }}>
           {recipes.map((recipe) => {

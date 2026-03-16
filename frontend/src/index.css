@@ -54,3 +54,10 @@ button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
+
+@media (max-width: 600px) {
+  .page-title { font-size: 1.6rem; }
+  .card { padding: 16px; }
+  .page-container { padding: 20px 16px; }
+  .action-button { min-height: 44px; }
+}
