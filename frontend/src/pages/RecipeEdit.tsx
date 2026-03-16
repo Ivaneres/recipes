@@ -178,10 +178,6 @@ export default function RecipeEdit() {
     }
   };
 
-  if (!isAdmin) {
-    return null;
-  }
-
   return (
     <div className="page-container" style={{ maxWidth: '900px' }}>
       <style>{sharedStyles}</style>

@@ -256,9 +256,9 @@ describe('RecipeEdit (non-admin)', () => {
     })
   })
 
-  it('renders nothing when user is not admin', () => {
+  it('renders Create New Recipe form for non-admin reader', () => {
     renderCreate()
-    expect(screen.queryByRole('heading', { name: 'Create New Recipe' })).not.toBeInTheDocument()
-    expect(screen.queryByTestId('recipe-title')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Create New Recipe' })).toBeInTheDocument()
+    expect(screen.getByTestId('recipe-title')).toBeInTheDocument()
   })
 })

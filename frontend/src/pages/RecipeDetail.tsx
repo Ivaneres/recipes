@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +22,203 @@ interface Recipe {
   created_by: number;
 }
 
+type IngredientEntry = { name: string; quantity?: number; unit?: string };
+
+function getIngredientDisplay(ing: IngredientEntry, scaleFactor: number): string {
+  const qty = ing.quantity != null ? ing.quantity * scaleFactor : null;
+  const formatted =
+    qty != null
+      ? qty % 1 === 0
+        ? qty.toString()
+        : qty.toFixed(2).replace(/\.?0+$/, '')
+      : null;
+  if (formatted && ing.unit) return `${formatted} ${ing.unit}`;
+  if (formatted) return formatted;
+  if (ing.unit) return ing.unit;
+  return '';
+}
+
+function isWordBoundary(str: string, start: number, end: number): boolean {
+  const before = start <= 0 ? null : str[start - 1];
+  const after = end >= str.length ? null : str[end];
+  const isLetter = (c: string) => /[\p{L}\d]/u.test(c);
+  return (before == null || !isLetter(before)) && (after == null || !isLetter(after));
+}
+
+function escapeHtmlAttr(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/** Core name without parenthetical or trailing " - ..." (e.g. "tamarind pulp (soaked)" → "tamarind pulp") */
+function getIngredientCoreName(name: string): string {
+  const trimmed = name.trim();
+  const paren = trimmed.search(/\s*[(\[]/);
+  const dash = trimmed.search(/\s+-\s+/);
+  let end = trimmed.length;
+  if (paren > 0) end = Math.min(end, paren);
+  if (dash > 0) end = Math.min(end, dash);
+  return trimmed.slice(0, end).trim();
+}
+
+/** Preparation/descriptor words we never use as a fallback pattern (avoids "blanched" → okra, "wedges" instead of "tomatoes"). */
+const PREPARATION_SKIP = new Set([
+  'blanched', 'diced', 'chopped', 'minced', 'sliced', 'grated', 'crushed', 'dried', 'toasted',
+  'peeled', 'pounded', 'soaked', 'drained', 'optional', 'garnish', 'wedges', 'halved',
+  'quartered', 'julienned', 'cubed', 'whole', 'ground', 'fresh', 'finely', 'roughly',
+  'cut', 'into', 'for', 'and', 'or', 'the', 'set', 'aside', 'taste', 'sautéing', 'to',
+]);
+
+/** Last ingredient-like word in core, skipping prep words (e.g. "...okra, blanched" → "okra"; "...tomatoes cut into wedges" → "tomatoes"). */
+function getLastMeaningfulWord(core: string): string | null {
+  const tokens = core.split(/\s+|,\s*/).filter((t) => t.length >= 3 && !/^\d+$/.test(t));
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const w = tokens[i].toLowerCase();
+    if (!PREPARATION_SKIP.has(w)) return tokens[i];
+  }
+  return null;
+}
+
+/** First ingredient-like word in core, skipping prep (e.g. "ladyfingers or okra, blanched" → "ladyfingers"). */
+function getFirstMeaningfulWord(core: string): string | null {
+  const tokens = core.split(/\s+|,\s*/).filter((t) => t.length >= 3 && !/^\d+$/.test(t));
+  for (let i = 0; i < tokens.length; i++) {
+    const w = tokens[i].toLowerCase();
+    if (!PREPARATION_SKIP.has(w)) return tokens[i];
+  }
+  return null;
+}
+
+/** Match strings per ingredient: full name, core name, last meaningful word, and first (e.g. "ladyfingers or okra" → both). */
+function getMatchPatterns(ingredients: IngredientEntry[]): { pattern: string; ing: IngredientEntry }[] {
+  const seenLong = new Set<string>();
+  const out: { pattern: string; ing: IngredientEntry }[] = [];
+  for (const ing of ingredients) {
+    const full = ing.name.trim();
+    const core = getIngredientCoreName(ing.name);
+    for (const p of [full, core]) {
+      if (!p || seenLong.has(p.toLowerCase())) continue;
+      seenLong.add(p.toLowerCase());
+      out.push({ pattern: p, ing });
+    }
+    const lastWord = getLastMeaningfulWord(core);
+    const firstWord = getFirstMeaningfulWord(core);
+    for (const word of [lastWord, firstWord]) {
+      if (!word) continue;
+      const w = word.toLowerCase();
+      if (w === full.toLowerCase() || w === core.toLowerCase()) continue;
+      out.push({ pattern: word, ing });
+    }
+  }
+  return out;
+}
+
+type Match = { start: number; end: number; ing: IngredientEntry };
+
+/** Find all word-boundary occurrences of each pattern in text; merge overlapping (keep longer). */
+function findIngredientMatches(text: string, patterns: { pattern: string; ing: IngredientEntry }[]): Match[] {
+  const matches: Match[] = [];
+  const lower = text.toLowerCase();
+  for (const { pattern, ing } of patterns) {
+    const pat = pattern.toLowerCase();
+    let pos = 0;
+    while (true) {
+      const idx = lower.indexOf(pat, pos);
+      if (idx === -1) break;
+      if (isWordBoundary(text, idx, idx + pat.length)) {
+        matches.push({ start: idx, end: idx + pat.length, ing });
+      }
+      pos = idx + 1;
+    }
+  }
+  matches.sort(
+    (a, b) =>
+      a.start - b.start ||
+      b.end - b.start - (a.end - a.start) ||
+      b.ing.name.length - a.ing.name.length
+  );
+  const merged: Match[] = [];
+  for (const m of matches) {
+    if (merged.length > 0 && m.start < merged[merged.length - 1].end) {
+      const prev = merged[merged.length - 1];
+      const mLen = m.end - m.start;
+      const prevLen = prev.end - prev.start;
+      if (mLen > prevLen || (mLen === prevLen && m.ing.name.length > prev.ing.name.length)) {
+        merged[merged.length - 1] = m;
+      }
+      continue;
+    }
+    merged.push(m);
+  }
+  return merged;
+}
+
+/** Build React segments for plain-text instructions with highlighted ingredients */
+function highlightIngredientsInPlainText(
+  text: string,
+  ingredients: IngredientEntry[],
+  scaleFactor: number,
+  segmentKeyPrefix: string
+): (string | React.ReactNode)[] {
+  if (!ingredients.length) return [text];
+  const patterns = getMatchPatterns(ingredients);
+  const matches = findIngredientMatches(text, patterns);
+  const segments: (string | React.ReactNode)[] = [];
+  let last = 0;
+  matches.forEach((m, keyIndex) => {
+    if (m.start > last) segments.push(text.slice(last, m.start));
+    const display = getIngredientDisplay(m.ing, scaleFactor);
+    segments.push(
+      <span
+        key={`${segmentKeyPrefix}-${keyIndex}`}
+        className="ingredient-highlight"
+        data-ingredient-display={display}
+        data-ingredient-name={m.ing.name}
+        title={display || m.ing.name || undefined}
+      >
+        {text.slice(m.start, m.end)}
+      </span>
+    );
+    last = m.end;
+  });
+  if (last < text.length) segments.push(text.slice(last));
+  return segments;
+}
+
+/** Return HTML string with ingredient spans for instructions that are HTML */
+function highlightIngredientsInHtml(
+  html: string,
+  ingredients: IngredientEntry[],
+  scaleFactor: number
+): string {
+  if (!ingredients.length) return html;
+  const patterns = getMatchPatterns(ingredients);
+  const parts = html.split(/(<[^>]+>)/g);
+  return parts
+    .map((part) => {
+      if (part.startsWith('<') && part.endsWith('>')) return part;
+      const matches = findIngredientMatches(part, patterns);
+      let result = '';
+      let last = 0;
+      for (const m of matches) {
+        if (m.start > last) result += part.slice(last, m.start);
+        const display = getIngredientDisplay(m.ing, scaleFactor);
+        const tooltipText = display || m.ing.name;
+        const escaped = escapeHtmlAttr(tooltipText);
+        const nameEscaped = escapeHtmlAttr(m.ing.name);
+        const sub = part.slice(m.start, m.end);
+        result += `<span class="ingredient-highlight" data-ingredient-display="${escapeHtmlAttr(display)}" data-ingredient-name="${nameEscaped}" title="${escaped}">${sub}</span>`;
+        last = m.end;
+      }
+      if (last < part.length) result += part.slice(last);
+      return result;
+    })
+    .join('');
+}
+
 export default function RecipeDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -29,6 +226,7 @@ export default function RecipeDetail() {
   const [loading, setLoading] = useState(true);
   const [scaleFactor, setScaleFactor] = useState(1);
   const [scaleInputValue, setScaleInputValue] = useState('1');
+  const [tooltip, setTooltip] = useState<{ display: string; x: number; y: number } | null>(null);
   const { isAdmin, isGuest, user } = useAuth();
   
   // Check if current user is the recipe creator
@@ -133,6 +331,30 @@ export default function RecipeDetail() {
           border-radius: 12px;
           margin: 24px 0;
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .ingredient-highlight {
+          background: linear-gradient(to bottom, transparent 60%, rgba(0, 123, 255, 0.2) 60%);
+          border-radius: 2px;
+          cursor: default;
+          padding: 0 1px;
+        }
+        .ingredient-highlight:hover {
+          background: linear-gradient(to bottom, transparent 50%, rgba(0, 123, 255, 0.35) 50%);
+        }
+        .ingredient-tooltip {
+          position: fixed;
+          z-index: 1000;
+          padding: 6px 10px;
+          background: #213547;
+          color: #fff;
+          font-size: 0.875rem;
+          border-radius: 6px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+          pointer-events: none;
+          white-space: nowrap;
+          max-width: 90vw;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
       `}</style>
       
@@ -349,29 +571,60 @@ export default function RecipeDetail() {
       {recipe.instructions && (
         <div className="recipe-section">
           <h2>Instructions</h2>
-          {/<[a-z][\s\S]*>/i.test(recipe.instructions) ? (
-            <div
-              className="recipe-detail"
-              style={{
-                color: '#213547',
-                lineHeight: '1.8',
-                fontSize: '1.05rem',
-              }}
-              dangerouslySetInnerHTML={{ __html: fixImageUrls(recipe.instructions) }}
-            />
-          ) : (
-            <div
-              className="recipe-detail"
-              style={{
-                color: '#213547',
-                lineHeight: '1.8',
-                fontSize: '1.05rem',
-                whiteSpace: 'pre-wrap',
-              }}
-            >
-              {recipe.instructions}
-            </div>
-          )}
+          <div
+            className="recipe-detail instructions-with-highlights"
+            style={{
+              color: '#213547',
+              lineHeight: '1.8',
+              fontSize: '1.05rem',
+              whiteSpace: 'pre-wrap',
+            }}
+            onMouseMove={(e) => {
+              const el = (e.target as HTMLElement).closest?.('.ingredient-highlight') as HTMLElement | null;
+              const display = el?.getAttribute?.('data-ingredient-display') ?? '';
+              const name = el?.getAttribute?.('data-ingredient-name') ?? '';
+              const text = display.trim() || name.trim();
+              if (text) {
+                setTooltip({ display: text, x: e.clientX, y: e.clientY });
+              } else {
+                setTooltip(null);
+              }
+            }}
+            onMouseLeave={() => setTooltip(null)}
+          >
+            {/<[a-z][\s\S]*>/i.test(recipe.instructions) ? (
+              <div
+                className="recipe-detail"
+                style={{ lineHeight: '1.8', fontSize: '1.05rem' }}
+                dangerouslySetInnerHTML={{
+                  __html: highlightIngredientsInHtml(
+                    fixImageUrls(recipe.instructions),
+                    recipe.ingredients ?? [],
+                    scaleFactor
+                  ),
+                }}
+              />
+            ) : (
+              highlightIngredientsInPlainText(
+                recipe.instructions,
+                recipe.ingredients ?? [],
+                scaleFactor,
+                'inst'
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {tooltip && (
+        <div
+          className="ingredient-tooltip"
+          style={{
+            left: Math.min(tooltip.x + 12, window.innerWidth - 120),
+            top: Math.max(8, tooltip.y - 32),
+          }}
+        >
+          {tooltip.display}
         </div>
       )}
 
