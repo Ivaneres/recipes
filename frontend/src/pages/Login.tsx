@@ -1,17 +1,29 @@
-import { useState } from 'react';
+import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { sharedStyles } from '../utils/styles';
+import { Button } from '../components/ui/Button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
+import { Input } from '../components/ui/Input';
 
 export default function Login() {
-  const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [isLogin, setIsLogin] = React.useState(true);
+  const [username, setUsername] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [error, setError] = React.useState('');
   const { login, register, loginAsGuest } = useAuth();
   const navigate = useNavigate();
+
+  const getErrorMessage = (err: unknown): string => {
+    if (typeof err === 'string') return err;
+    if (err && typeof err === 'object') {
+      const anyErr = err as { response?: { data?: { detail?: unknown } } };
+      const detail = anyErr.response?.data?.detail;
+      if (typeof detail === 'string') return detail;
+    }
+    return 'An error occurred';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,155 +41,110 @@ export default function Login() {
         await register(username, email, password);
       }
       navigate('/');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'An error occurred');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     }
   };
 
   return (
-    <div style={{ 
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '20px',
-      backgroundColor: '#ffffff'
-    }}>
-      <style>{sharedStyles}</style>
-      <div className="card" style={{ maxWidth: '420px', width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <h1 className="page-title" style={{ fontSize: '2rem', marginBottom: '8px' }}>
-            {isLogin ? 'Welcome Back' : 'Create Account'}
-          </h1>
-          <p className="page-subtitle" style={{ fontSize: '1rem' }}>
-            {isLogin ? 'Sign in to continue' : 'Get started with recipe tracking'}
-          </p>
-        </div>
+    <div className="min-h-full bg-bg">
+      <div className="container-page flex min-h-full items-center justify-center py-10">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>{isLogin ? 'Welcome back' : 'Create account'}</CardTitle>
+            <CardDescription>{isLogin ? 'Sign in to continue.' : 'Create an account to save and plan.'}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {error && (
+              <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+                <div className="font-medium">Sign in failed</div>
+                <div className="text-muted">{error}</div>
+              </div>
+            )}
 
-        {error && (
-          <div className="alert alert-error">
-            {error}
-          </div>
-        )}
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <div className="text-sm font-medium">Username</div>
+                <div className="mt-2">
+                  <Input value={username} onChange={(e) => setUsername(e.target.value)} required />
+                </div>
+              </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label">Username</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              className="form-input"
-              placeholder="Enter your username"
-            />
-          </div>
+              {!isLogin && (
+                <div>
+                  <div className="text-sm font-medium">Email</div>
+                  <div className="mt-2">
+                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  </div>
+                </div>
+              )}
 
-          {!isLogin && (
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="form-input"
-                placeholder="Enter your email"
-              />
+              <div>
+                <div className="text-sm font-medium">Password</div>
+                <div className="mt-2">
+                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                </div>
+              </div>
+
+              {!isLogin && (
+                <div>
+                  <div className="text-sm font-medium">Confirm password</div>
+                  <div className="mt-2">
+                    <Input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              <Button type="submit" variant="primary" className="w-full">
+                {isLogin ? 'Sign in' : 'Create account'}
+              </Button>
+            </form>
+
+            {isLogin && (
+              <div className="pt-2">
+                <div className="flex items-center gap-3 text-xs text-muted">
+                  <div className="h-px flex-1 bg-border" />
+                  <span>or</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <div className="mt-3">
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => {
+                      loginAsGuest();
+                      navigate('/');
+                    }}
+                  >
+                    Continue as guest
+                  </Button>
+                  <div className="mt-2 text-center text-xs text-muted">Browse public recipes without an account.</div>
+                </div>
+              </div>
+            )}
+
+            <div className="text-center text-sm text-muted">
+              {isLogin ? "Don't have an account? " : 'Already have an account? '}
+              <button
+                type="button"
+                className="font-medium text-primary underline underline-offset-4"
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setError('');
+                  setPassword('');
+                  setConfirmPassword('');
+                }}
+              >
+                {isLogin ? 'Register' : 'Login'}
+              </button>
             </div>
-          )}
-
-          <div className="form-group">
-            <label className="form-label">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="form-input"
-              placeholder="Enter your password"
-            />
-          </div>
-
-          {!isLogin && (
-            <div className="form-group">
-              <label className="form-label">Confirm Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="form-input"
-                placeholder="Confirm your password"
-              />
-            </div>
-          )}
-
-          <button
-            type="submit"
-            className="action-button action-button-primary"
-            style={{ width: '100%', justifyContent: 'center', marginBottom: '20px' }}
-          >
-            {isLogin ? 'Sign In' : 'Create Account'}
-          </button>
-        </form>
-
-        {isLogin && (
-          <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-            <div style={{ 
-              margin: '20px 0', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '12px',
-              color: '#666'
-            }}>
-              <div style={{ flex: 1, height: '1px', background: '#e0e0e0' }}></div>
-              <span style={{ fontSize: '0.875rem' }}>or</span>
-              <div style={{ flex: 1, height: '1px', background: '#e0e0e0' }}></div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                loginAsGuest();
-                navigate('/');
-              }}
-              className="action-button action-button-secondary"
-              style={{ width: '100%', justifyContent: 'center' }}
-            >
-              👤 Login as Guest
-            </button>
-            <p style={{ 
-              marginTop: '12px', 
-              fontSize: '0.875rem', 
-              color: '#888',
-              lineHeight: '1.5'
-            }}>
-              Browse public recipes without creating an account
-            </p>
-          </div>
-        )}
-
-        <p style={{ textAlign: 'center', margin: 0, color: '#666' }}>
-          {isLogin ? "Don't have an account? " : 'Already have an account? '}
-          <button
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError('');
-              setPassword('');
-              setConfirmPassword('');
-            }}
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              color: '#007bff', 
-              cursor: 'pointer',
-              fontWeight: '500',
-              textDecoration: 'underline'
-            }}
-          >
-            {isLogin ? 'Register' : 'Login'}
-          </button>
-        </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

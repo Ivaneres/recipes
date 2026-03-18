@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import * as React from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { getImageUrl } from '../utils/imageUrl';
+import { Card, CardContent } from '../components/ui/Card';
+import { Input } from '../components/ui/Input';
+import { Button } from '../components/ui/Button';
 
 interface Recipe {
   id: number;
@@ -25,290 +28,157 @@ function stripHtml(html: string): string {
 
 export default function RecipeList() {
   const { isGuest } = useAuth();
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [recipes, setRecipes] = React.useState<Recipe[]>([]);
+  const [search, setSearch] = React.useState('');
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  useEffect(() => {
-    fetchRecipes();
+  React.useEffect(() => {
+    let canceled = false;
+    setLoading(true);
+    setError(null);
+
+    const t = window.setTimeout(async () => {
+      try {
+        const params = search.trim() ? { search: search.trim() } : {};
+        const response = await api.get('/recipes', { params });
+        if (!canceled) setRecipes(response.data);
+      } catch (e) {
+        console.error('Error fetching recipes:', e);
+        if (!canceled) setError('Could not load recipes.');
+      } finally {
+        if (!canceled) setLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      canceled = true;
+      window.clearTimeout(t);
+    };
   }, [search]);
 
-  const fetchRecipes = async () => {
-    try {
-      setLoading(true);
-      const params = search ? { search } : {};
-      const response = await api.get('/recipes', { params });
-      setRecipes(response.data);
-    } catch (error) {
-      console.error('Error fetching recipes:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div style={{ 
-      padding: '40px 20px', 
-      maxWidth: '1400px', 
-      margin: '0 auto',
-      color: '#213547' 
-    }}>
-      <style>{`
-        .recipe-card {
-          background: white;
-          border-radius: 12px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-          transition: all 0.3s ease;
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-        }
-        .recipe-card:hover {
-          transform: translateY(-4px);
-          border-color: #007bff;
-          transform: translateY(-4px);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-        }
-        .recipe-card-image {
-          width: 100%;
-          height: 240px;
-          object-fit: cover;
-          background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        }
-        .recipe-card-content {
-          padding: 24px;
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-        }
-        .recipe-card-title {
-          font-size: 1.5rem;
-          font-weight: 600;
-          color: #213547;
-          margin: 0 0 12px 0;
-          line-height: 1.3;
-        }
-        .recipe-card-description {
-          color: #666;
-          font-size: 0.95rem;
-          line-height: 1.6;
-          margin: 0 0 16px 0;
-          flex: 1;
-          display: -webkit-box;
-          -webkit-line-clamp: 3;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-        .recipe-card-meta {
-          display: flex;
-          gap: 16px;
-          font-size: 0.875rem;
-          color: #888;
-          margin-top: auto;
-          padding-top: 16px;
-          border-top: 1px solid #f0f0f0;
-        }
-        .recipe-card-meta-item {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-        .search-input {
-          width: 100%;
-          max-width: 500px;
-          padding: 14px 20px;
-          border: 2px solid #e0e0e0;
-          border-radius: 12px;
-          font-size: 1rem;
-          transition: all 0.2s;
-        }
-        .search-input:focus {
-          outline: none;
-          border-color: #007bff;
-          box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
-        }
-        .action-button {
-          padding: 12px 24px;
-          border-radius: 8px;
-          font-size: 0.95rem;
-          font-weight: 500;
-          text-decoration: none;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          transition: all 0.2s;
-          border: none;
-          cursor: pointer;
-        }
-        .action-button-primary {
-          background: #007bff;
-          color: white;
-        }
-        .action-button-primary:hover {
-          background: #0056b3;
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
-        }
-        .action-button-secondary {
-          background: #f8f9fa;
-          color: #213547;
-          border: 1px solid #e0e0e0;
-        }
-        .action-button-secondary:hover {
-          background: #e9ecef;
-          border-color: #d0d0d0;
-        }
-      `}</style>
-
-      {/* Header Section */}
-      <div style={{ 
-        marginBottom: '40px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '24px'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: '20px'
-        }}>
+    <div className="container-page pt-4 md:pt-8">
+      <div className="sticky top-14 z-30 -mx-4 border-b border-border bg-bg/85 px-4 py-4 backdrop-blur md:top-14 md:-mx-6 md:px-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 style={{ 
-              color: '#213547', 
-              margin: '0 0 8px 0',
-              fontSize: '2.5rem',
-              fontWeight: '700'
-            }}>
-              Recipes
-            </h1>
-            <p style={{ 
-              color: '#666', 
-              margin: 0,
-              fontSize: '1.1rem'
-            }}>
-              Discover and manage your favorite recipes
-            </p>
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Recipes</h1>
+            <p className="mt-1 text-sm text-muted">Search, open, and start cooking.</p>
           </div>
-          {!isGuest && (
-            <div style={{ 
-              display: 'flex', 
-              gap: '12px',
-              flexWrap: 'wrap'
-            }}>
-              <Link
-                to="/recipes/new"
-                className="action-button action-button-primary"
-              >
-                <span>+</span>
-                <span>New Recipe</span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="w-full sm:w-[360px]">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search recipes…"
+                aria-label="Search recipes"
+              />
+            </div>
+            {!isGuest && (
+              <Link to="/add" className="shrink-0">
+                <Button variant="primary">Add</Button>
               </Link>
-              <Link
-                to="/recipes/import"
-                className="action-button action-button-secondary"
-              >
-                <span>📥</span>
-                <span>Import</span>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-3 text-xs text-muted">{loading ? 'Loading…' : `${recipes.length} recipes`}</div>
+      </div>
+
+      {error && (
+        <div className="mt-6 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+          <div className="font-medium">Something went wrong</div>
+          <div className="text-muted">{error}</div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <div key={i} className="animate-pulse rounded-lg border border-border bg-surface">
+              <div className="h-40 w-full rounded-t-lg bg-surface2" />
+              <div className="p-4">
+                <div className="h-4 w-2/3 rounded bg-surface2" />
+                <div className="mt-3 h-3 w-full rounded bg-surface2" />
+                <div className="mt-2 h-3 w-5/6 rounded bg-surface2" />
+                <div className="mt-4 flex gap-2">
+                  <div className="h-9 w-24 rounded bg-surface2" />
+                  <div className="h-9 w-20 rounded bg-surface2" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : recipes.length === 0 ? (
+        <div className="mt-10 rounded-lg border border-border bg-surface px-5 py-10 text-center">
+          <div className="text-base font-semibold">No recipes found</div>
+          <div className="mt-1 text-sm text-muted">
+            {search.trim() ? 'Try a different search term.' : 'Add your first recipe to get started.'}
+          </div>
+          {!isGuest && !search.trim() && (
+            <div className="mt-5">
+              <Link to="/add">
+                <Button variant="primary">Add a recipe</Button>
               </Link>
             </div>
           )}
-
-        {/* Search Bar */}
-        <div>
-          <input
-            type="text"
-            placeholder="Search recipes by name or description..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="search-input"
-          />
-        </div>
-      </div>
-
-      {/* Recipes Grid */}
-      {loading ? (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '60px 20px',
-          color: '#666',
-          fontSize: '1.1rem'
-        }}>
-          Loading recipes...
-        </div>
-      ) : recipes.length === 0 ? (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '60px 20px',
-          color: '#666'
-        }}>
-          <p style={{ fontSize: '1.2rem', marginBottom: '8px' }}>No recipes found</p>
-          <p style={{ color: '#888' }}>
-            {search ? 'Try a different search term' : 'Get started by creating your first recipe'}
-          </p>
         </div>
       ) : (
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          gap: '32px'
-        }}>
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {recipes.map((recipe) => {
             const descriptionText = stripHtml(recipe.description || '');
-            const previewText = descriptionText.length > 120 
-              ? descriptionText.substring(0, 120) + '...' 
-              : descriptionText;
+            const previewText =
+              descriptionText.length > 140 ? `${descriptionText.substring(0, 140).trim()}…` : descriptionText;
 
             return (
-              <Link
-                key={recipe.id}
-                to={`/recipes/${recipe.id}`}
-                className="recipe-card"
-                style={{ textDecoration: 'none', color: 'inherit' }}
-              >
-                {recipe.cover_image && (
-                  <img 
-                    src={getImageUrl(recipe.cover_image) || ''} 
-                    alt={recipe.title}
-                    className="recipe-card-image"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                )}
-                <div className="recipe-card-content">
-                  <h3 className="recipe-card-title">{recipe.title}</h3>
-                  {previewText && (
-                    <p className="recipe-card-description">{previewText}</p>
-                  )}
-                  <div className="recipe-card-meta">
-                    {recipe.prep_time_minutes && (
-                      <div className="recipe-card-meta-item">
-                        <span>⏱️</span>
-                        <span>{recipe.prep_time_minutes}m prep</span>
-                      </div>
-                    )}
-                    {recipe.cook_time_minutes && (
-                      <div className="recipe-card-meta-item">
-                        <span>🔥</span>
-                        <span>{recipe.cook_time_minutes}m cook</span>
-                      </div>
-                    )}
-                    {recipe.servings && (
-                      <div className="recipe-card-meta-item">
-                        <span>👥</span>
-                        <span>{recipe.servings} servings</span>
-                      </div>
+              <Card key={recipe.id} className="overflow-hidden hover:bg-surface2/40 transition">
+                <Link to={`/recipes/${recipe.id}`} className="block">
+                  <div className="relative h-44 w-full bg-surface2">
+                    {recipe.cover_image ? (
+                      <img
+                        src={getImageUrl(recipe.cover_image) || ''}
+                        alt={recipe.title}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-sm text-muted">No image</div>
                     )}
                   </div>
-                </div>
-              </Link>
+                </Link>
+
+                <CardContent className="p-4">
+                  <div className="min-h-[3rem]">
+                    <Link to={`/recipes/${recipe.id}`} className="block">
+                      <h3 className="line-clamp-2 text-base font-semibold leading-snug">{recipe.title}</h3>
+                    </Link>
+                    {previewText && <p className="mt-1 line-clamp-2 text-sm text-muted">{previewText}</p>}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
+                    {recipe.prep_time_minutes != null && (
+                      <span className="rounded-md border border-border bg-surface px-2 py-1">⏱️ {recipe.prep_time_minutes}m</span>
+                    )}
+                    {recipe.cook_time_minutes != null && (
+                      <span className="rounded-md border border-border bg-surface px-2 py-1">🔥 {recipe.cook_time_minutes}m</span>
+                    )}
+                    {recipe.servings != null && (
+                      <span className="rounded-md border border-border bg-surface px-2 py-1">👥 {recipe.servings}</span>
+                    )}
+                  </div>
+
+                  {/* Intentionally no "Open"/"Cook" buttons here.
+                      Users can click the recipe card/title to enter Recipe Detail,
+                      then start cook mode from there. */}
+                </CardContent>
+              </Card>
             );
           })}
         </div>
       )}
-
-      </div>
     </div>
   );
 }

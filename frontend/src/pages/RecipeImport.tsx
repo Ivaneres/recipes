@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { sharedStyles } from '../utils/styles';
+import { Button } from '../components/ui/Button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
+import { Input } from '../components/ui/Input';
 
 interface Ingredient {
   name: string;
@@ -29,27 +31,29 @@ interface PreviewData {
 
 export default function RecipeImport() {
   const navigate = useNavigate();
-  const [url, setUrl] = useState('');
-  const [isPrivate, setIsPrivate] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [step, setStep] = useState<1 | 2>(1);
-  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [url, setUrl] = React.useState('');
+  const [isPrivate, setIsPrivate] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [step, setStep] = React.useState<1 | 2>(1);
+  const [previewData, setPreviewData] = React.useState<PreviewData | null>(null);
 
   // Preview step state (editable)
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [instructions, setInstructions] = useState('');
-  const [prepTime, setPrepTime] = useState<number | ''>('');
-  const [cookTime, setCookTime] = useState<number | ''>('');
-  const [servings, setServings] = useState<number | ''>('');
-  const [selectedCoverUrl, setSelectedCoverUrl] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
+  const [title, setTitle] = React.useState('');
+  const [description, setDescription] = React.useState('');
+  const [ingredients, setIngredients] = React.useState<Ingredient[]>([]);
+  const [instructions, setInstructions] = React.useState('');
+  const [prepTime, setPrepTime] = React.useState<number | ''>('');
+  const [cookTime, setCookTime] = React.useState<number | ''>('');
+  const [servings, setServings] = React.useState<number | ''>('');
+  const [selectedCoverUrl, setSelectedCoverUrl] = React.useState<string | null>(null);
+  const [importing, setImporting] = React.useState(false);
   // Raw ingredients text: from extractor (editable) or pasted by user. Re-parsing replaces the table.
-  const [rawIngredientText, setRawIngredientText] = useState('');
-  const [parsePattern, setParsePattern] = useState<'quantity_unit_name' | 'quantity_only' | 'name_only'>('quantity_unit_name');
-  const [parsingIngredients, setParsingIngredients] = useState(false);
+  const [rawIngredientText, setRawIngredientText] = React.useState('');
+  const [parsePattern, setParsePattern] = React.useState<'quantity_unit_name' | 'quantity_only' | 'name_only'>(
+    'quantity_unit_name'
+  );
+  const [parsingIngredients, setParsingIngredients] = React.useState(false);
 
   const handleFetchPreview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,9 +75,15 @@ export default function RecipeImport() {
       setServings(data.recipe.servings ?? '');
       setSelectedCoverUrl(null);
       setStep(2);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching preview:', err);
-      setError(err.response?.data?.detail || 'Could not extract recipe from URL. Try another URL or create the recipe manually.');
+      const anyErr = err as { response?: { data?: { detail?: unknown } } };
+      const detail = anyErr.response?.data?.detail;
+      setError(
+        typeof detail === 'string'
+          ? detail
+          : 'Could not extract recipe from URL. Try another URL or create the recipe manually.'
+      );
     } finally {
       setLoading(false);
     }
@@ -117,9 +127,11 @@ export default function RecipeImport() {
         pattern: parsePattern,
       });
       setIngredients(response.data.ingredients ?? []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Re-parse ingredients:', err);
-      setError(err.response?.data?.detail || 'Failed to re-parse ingredients.');
+      const anyErr = err as { response?: { data?: { detail?: unknown } } };
+      const detail = anyErr.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Failed to re-parse ingredients.');
     } finally {
       setParsingIngredients(false);
     }
@@ -145,9 +157,11 @@ export default function RecipeImport() {
         cover_image_url: selectedCoverUrl || undefined,
       });
       navigate(`/recipes/${response.data.id}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error importing recipe:', err);
-      setError(err.response?.data?.detail || 'Failed to import recipe.');
+      const anyErr = err as { response?: { data?: { detail?: unknown } } };
+      const detail = anyErr.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Failed to import recipe.');
     } finally {
       setImporting(false);
     }
@@ -160,372 +174,287 @@ export default function RecipeImport() {
   };
 
   return (
-    <div className="page-container" style={{ maxWidth: '900px' }}>
-      <style>{sharedStyles}</style>
-
-      <div style={{ marginBottom: '24px' }}>
-        <button
-          onClick={() => (step === 2 ? goBackToUrl() : navigate('/recipes'))}
-          className="action-button action-button-secondary"
-        >
-          ← {step === 2 ? 'Back to URL' : 'Back to Recipes'}
-        </button>
+    <div className="container-page pt-6 md:pt-10">
+      <div className="mb-5">
+        <Button variant="ghost" size="sm" onClick={() => (step === 2 ? goBackToUrl() : navigate('/recipes'))}>
+          ← {step === 2 ? 'Back to URL' : 'Recipes'}
+        </Button>
       </div>
 
-      {step === 1 && (
-        <div className="card">
-          <div className="page-header" style={{ marginBottom: '24px' }}>
-            <h1 className="page-title" style={{ fontSize: '2rem' }}>Import Recipe from URL</h1>
-            <p className="page-subtitle" style={{ fontSize: '1rem' }}>
-              Paste a URL from any recipe website. You’ll get a preview where you can fix parsing and pick a cover image before importing.
-            </p>
-          </div>
+      {step === 1 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Import from URL</CardTitle>
+            <CardDescription>Paste a link, then review and fix the preview before importing.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {error && (
+              <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+                <div className="font-medium">Import failed</div>
+                <div className="text-muted">{error}</div>
+              </div>
+            )}
 
-          {error && (
-            <div className="alert alert-error">{error}</div>
-          )}
+            <form onSubmit={handleFetchPreview} className="space-y-4">
+              <div>
+                <div className="text-sm font-medium">Recipe URL</div>
+                <div className="mt-2">
+                  <Input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://example.com/recipe"
+                    required
+                    disabled={loading}
+                  />
+                </div>
+              </div>
 
-          <form onSubmit={handleFetchPreview}>
-            <div className="form-group">
-              <label className="form-label">Recipe URL</label>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://www.example.com/recipe"
-                required
-                disabled={loading}
-                className="form-input"
-              />
-            </div>
-
-            <div className="form-group">
-              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <label className="flex items-center gap-3 text-sm">
                 <input
                   type="checkbox"
+                  className="h-4 w-4 accent-[rgb(var(--primary))]"
                   checked={isPrivate}
                   onChange={(e) => setIsPrivate(e.target.checked)}
-                  style={{ width: '20px', height: '20px', cursor: 'pointer' }}
                 />
-                <span className="form-label" style={{ margin: 0 }}>
-                  Make this recipe private (only visible to you)
-                </span>
+                <span>Make private (only visible to you)</span>
               </label>
-            </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-              <button
-                type="submit"
-                disabled={loading || !url.trim()}
-                className="action-button action-button-primary"
-                style={{
-                  opacity: loading || !url.trim() ? 0.6 : 1,
-                  cursor: loading || !url.trim() ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {loading ? '⏳ Loading preview…' : 'Next: Preview & edit'}
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/recipes')}
-                className="action-button action-button-secondary"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {step === 2 && previewData && (
-        <>
-          {error && <div className="alert alert-error" style={{ marginBottom: '16px' }}>{error}</div>}
-
-          <div className="card" style={{ marginBottom: '24px' }}>
-            <h2 style={{ margin: '0 0 16px 0', fontSize: '1.5rem' }}>Edit before importing</h2>
-            <p style={{ color: '#666', marginBottom: '20px', fontSize: '0.95rem' }}>
-              Adjust title, sections, and quantity parsing. Your choices are reflected in the preview below.
-            </p>
-
-            <div className="form-group">
-              <label className="form-label">Title</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="form-input"
-                placeholder="Recipe title"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Description (optional)</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="form-input"
-                rows={3}
-                placeholder="Short description"
-                style={{ resize: 'vertical' }}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Prep time (minutes)</label>
-              <input
-                type="number"
-                min={0}
-                value={prepTime}
-                onChange={(e) => setPrepTime(e.target.value === '' ? '' : Number(e.target.value))}
-                className="form-input"
-                style={{ maxWidth: '120px' }}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Cook time (minutes)</label>
-              <input
-                type="number"
-                min={0}
-                value={cookTime}
-                onChange={(e) => setCookTime(e.target.value === '' ? '' : Number(e.target.value))}
-                className="form-input"
-                style={{ maxWidth: '120px' }}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Servings</label>
-              <input
-                type="number"
-                min={1}
-                value={servings}
-                onChange={(e) => setServings(e.target.value === '' ? '' : Number(e.target.value))}
-                className="form-input"
-                style={{ maxWidth: '120px' }}
-              />
-            </div>
-
-            <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '24px 0' }} />
-
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '1.2rem' }}>Ingredients</h3>
-            <p style={{ color: '#666', fontSize: '0.875rem', marginBottom: '12px' }}>
-              Edit quantity, unit, or name in the table below. If parsing is wrong, adjust the raw text (remove junk lines or paste your own list) and click Re-parse.
-            </p>
-            <div style={{ marginBottom: '16px' }}>
-              <label className="form-label" style={{ display: 'block', marginBottom: '6px' }}>Raw ingredients (one per line)</label>
-              <textarea
-                value={rawIngredientText}
-                onChange={(e) => setRawIngredientText(e.target.value)}
-                className="form-input"
-                rows={6}
-                placeholder="Paste ingredients here, one per line (e.g. 200 g flour, 1 tsp salt). Remove header lines if the parser started in the wrong place, then click Re-parse."
-                style={{ resize: 'vertical', width: '100%', fontFamily: 'inherit', fontSize: '0.9rem' }}
-              />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
-                <select
-                  value={parsePattern}
-                  onChange={(e) => setParsePattern(e.target.value as 'quantity_unit_name' | 'quantity_only' | 'name_only')}
-                  className="form-input"
-                  style={{ width: 'auto', minWidth: '180px', margin: 0 }}
-                >
-                  <option value="quantity_unit_name">Quantity + unit + name</option>
-                  <option value="quantity_only">Quantity + name (no unit)</option>
-                  <option value="name_only">Name only</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={handleReparseIngredients}
-                  disabled={parsingIngredients}
-                  className="action-button action-button-primary"
-                  style={{ padding: '8px 16px' }}
-                >
-                  {parsingIngredients ? '⏳ Re-parsing…' : 'Re-parse ingredients'}
-                </button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button type="submit" variant="primary" disabled={loading || !url.trim()}>
+                  {loading ? 'Loading preview…' : 'Next: Preview'}
+                </Button>
+                <Button variant="secondary" onClick={() => navigate('/recipes')}>
+                  Cancel
+                </Button>
               </div>
+            </form>
+
+            <div className="rounded-lg border border-border bg-surface2/40 px-4 py-3 text-sm text-muted">
+              Tip: if preview fails, use Manual create in the “Add recipe” screen.
             </div>
-            <p style={{ color: '#666', fontSize: '0.875rem', marginBottom: '12px' }}>
-              Parsed list — edit, add, or remove rows as needed.
-            </p>
-
-            <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
-              {ingredients.length === 0 ? (
-                <p style={{ color: '#888', fontSize: '0.9rem', margin: '12px 10px' }}>No ingredients extracted. Add them below.</p>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                  <thead>
-                    <tr style={{ background: '#f5f5f5', borderBottom: '1px solid #e0e0e0' }}>
-                      <th style={{ textAlign: 'left', padding: '8px 10px', fontWeight: 600, color: '#555', width: '72px' }}>Qty</th>
-                      <th style={{ textAlign: 'left', padding: '8px 10px', fontWeight: 600, color: '#555', width: '88px' }}>Unit</th>
-                      <th style={{ textAlign: 'left', padding: '8px 10px', fontWeight: 600, color: '#555' }}>Ingredient</th>
-                      <th style={{ width: '36px' }} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ingredients.map((ing, i) => (
-                      <tr key={i} style={{ borderBottom: i < ingredients.length - 1 ? '1px solid #eee' : 'none' }}>
-                        <td style={{ padding: '4px 10px', verticalAlign: 'middle' }}>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={ing.quantity != null ? String(ing.quantity) : ''}
-                            onChange={(e) => updateIngredient(i, 'quantity', e.target.value)}
-                            placeholder="—"
-                            className="form-input"
-                            style={{ width: '100%', maxWidth: '64px', margin: 0, padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}
-                          />
-                        </td>
-                        <td style={{ padding: '4px 10px', verticalAlign: 'middle' }}>
-                          <input
-                            type="text"
-                            value={ing.unit ?? ''}
-                            onChange={(e) => updateIngredient(i, 'unit', e.target.value)}
-                            placeholder="—"
-                            className="form-input"
-                            style={{ width: '100%', maxWidth: '96px', margin: 0, padding: '6px 8px' }}
-                          />
-                        </td>
-                        <td style={{ padding: '4px 10px', verticalAlign: 'middle' }}>
-                          <input
-                            type="text"
-                            value={ing.name ?? ''}
-                            onChange={(e) => updateIngredient(i, 'name', e.target.value)}
-                            placeholder="Ingredient name"
-                            className="form-input"
-                            style={{ width: '100%', margin: 0, padding: '6px 8px' }}
-                          />
-                        </td>
-                        <td style={{ padding: '4px 8px', verticalAlign: 'middle' }}>
-                          <button
-                            type="button"
-                            onClick={() => removeIngredient(i)}
-                            className="action-button action-button-danger"
-                            style={{ padding: '6px 10px' }}
-                            title="Remove ingredient"
-                          >
-                            −
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              <div style={{ padding: '8px 10px', borderTop: '1px solid #eee' }}>
-                <button
-                  type="button"
-                  onClick={addIngredient}
-                  className="action-button action-button-secondary"
-                  style={{ padding: '6px 12px' }}
-                >
-                  + Add ingredient
-                </button>
+          </CardContent>
+        </Card>
+      ) : (
+        previewData && (
+          <div className="space-y-4">
+            {error && (
+              <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+                <div className="font-medium">Something went wrong</div>
+                <div className="text-muted">{error}</div>
               </div>
-            </div>
-
-            <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '24px 0' }} />
-
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '1.2rem' }}>Instructions</h3>
-            <p style={{ color: '#666', fontSize: '0.875rem', marginBottom: '8px' }}>
-              If we captured the wrong section (e.g. abbreviated instead of full), trim the text below to the start and end you want, or paste the full method. You can delete lines at the top or bottom that don’t belong.
-            </p>
-            <textarea
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              className="form-input"
-              rows={10}
-              placeholder="Instructions / method"
-              style={{ resize: 'vertical' }}
-            />
-
-            <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '24px 0' }} />
-
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '1.2rem' }}>Cover image</h3>
-            <p style={{ color: '#666', fontSize: '0.875rem', marginBottom: '12px' }}>
-              Choose an image from the recipe page to use as the cover (optional).
-            </p>
-            {previewData.image_urls?.length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                {previewData.image_urls.slice(0, 24).map((imgUrl) => (
-                  <button
-                    key={imgUrl}
-                    type="button"
-                    onClick={() => setSelectedCoverUrl(selectedCoverUrl === imgUrl ? null : imgUrl)}
-                    style={{
-                      padding: 0,
-                      border: selectedCoverUrl === imgUrl ? '3px solid #007bff' : '2px solid #e0e0e0',
-                      borderRadius: '8px',
-                      overflow: 'hidden',
-                      background: '#f0f0f0',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <img
-                      src={imgUrl}
-                      alt=""
-                      style={{ display: 'block', width: '100px', height: '100px', objectFit: 'cover' }}
-                      loading="lazy"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  </button>
-                ))}
-                {selectedCoverUrl && (
-                  <span style={{ alignSelf: 'center', color: '#007bff', fontSize: '0.9rem' }}>
-                    Selected as cover
-                  </span>
-                )}
-              </div>
-            ) : (
-              <p style={{ color: '#888', fontSize: '0.9rem' }}>No images found on the page.</p>
             )}
-          </div>
 
-          <div className="card" style={{ marginBottom: '24px', background: '#f8f9fa' }}>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '1.1rem' }}>Preview: how it will look</h3>
-            <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '16px', background: 'white' }}>
-              <h4 style={{ margin: '0 0 8px 0' }}>{title || 'Untitled'}</h4>
-              {description && <p style={{ color: '#666', margin: '0 0 12px 0', fontSize: '0.95rem' }}>{description.slice(0, 150)}{description.length > 150 ? '…' : ''}</p>}
-              {(prepTime !== '' || cookTime !== '' || servings !== '') && (
-                <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#555' }}>
-                  {prepTime !== '' && `Prep: ${prepTime} min`}
-                  {prepTime !== '' && (cookTime !== '' || servings !== '') && ' · '}
-                  {cookTime !== '' && `Cook: ${cookTime} min`}
-                  {servings !== '' && (prepTime !== '' || cookTime !== '') && ' · '}
-                  {servings !== '' && `Servings: ${servings}`}
-                </p>
-              )}
-              <p style={{ margin: 0, fontSize: '0.9rem' }}><strong>Ingredients:</strong> {ingredients.length} item(s)</p>
-              <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{instructions ? instructions.slice(0, 200) + (instructions.length > 200 ? '…' : '') : '—'}</p>
-            </div>
-          </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Review & edit</CardTitle>
+                <CardDescription>Fix fields, ingredients parsing, and choose a cover image.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div>
+                  <div className="text-sm font-medium">Title</div>
+                  <div className="mt-2">
+                    <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Recipe title" />
+                  </div>
+                </div>
 
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button
-              onClick={handleImportConfirm}
-              disabled={importing}
-              className="action-button action-button-primary"
-            >
-              {importing ? '⏳ Importing…' : 'Import recipe'}
-            </button>
-            <button onClick={goBackToUrl} className="action-button action-button-secondary">
-              Back to URL
-            </button>
-            <button onClick={() => navigate('/recipes')} className="action-button action-button-secondary">
-              Cancel
-            </button>
-          </div>
-        </>
-      )}
+                <div>
+                  <div className="text-sm font-medium">Description (optional)</div>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                    className="mt-2 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
+                    placeholder="Short description"
+                  />
+                </div>
 
-      {step === 1 && (
-        <div className="card" style={{ marginTop: '32px', background: '#f8f9fa' }}>
-          <h3 style={{ color: '#213547', marginTop: 0, marginBottom: '12px', fontSize: '1.25rem' }}>Tips</h3>
-          <ul style={{ color: '#666', lineHeight: '1.8', margin: 0, paddingLeft: '20px' }}>
-            <li>Supported sites include most recipe websites with structured data.</li>
-            <li>On the next screen you can fix quantity parsing, trim sections, and pick a cover image.</li>
-            <li>If preview fails, try creating the recipe manually.</li>
-          </ul>
-        </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div>
+                    <div className="text-sm font-medium">Prep (min)</div>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={prepTime}
+                      onChange={(e) => setPrepTime(e.target.value === '' ? '' : Number(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">Cook (min)</div>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={cookTime}
+                      onChange={(e) => setCookTime(e.target.value === '' ? '' : Number(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">Servings</div>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={servings}
+                      onChange={(e) => setServings(e.target.value === '' ? '' : Number(e.target.value))}
+                    />
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-5">
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">Ingredients</div>
+                      <div className="text-xs text-muted">
+                        Edit the list, or paste raw lines and re-parse.
+                      </div>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={addIngredient}>
+                      + Add
+                    </Button>
+                  </div>
+
+                  <div className="mt-3">
+                    <div className="text-xs font-medium text-muted">Raw ingredients (one per line)</div>
+                    <textarea
+                      value={rawIngredientText}
+                      onChange={(e) => setRawIngredientText(e.target.value)}
+                      rows={6}
+                      className="mt-2 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
+                      placeholder="Paste ingredients here…"
+                    />
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <select
+                        value={parsePattern}
+                        onChange={(e) =>
+                          setParsePattern(e.target.value as 'quantity_unit_name' | 'quantity_only' | 'name_only')
+                        }
+                        className="h-11 rounded-md border border-border bg-surface px-3 text-sm"
+                      >
+                        <option value="quantity_unit_name">Quantity + unit + name</option>
+                        <option value="quantity_only">Quantity + name</option>
+                        <option value="name_only">Name only</option>
+                      </select>
+                      <Button variant="primary" onClick={handleReparseIngredients} disabled={parsingIngredients}>
+                        {parsingIngredients ? 'Re-parsing…' : 'Re-parse'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 overflow-hidden rounded-lg border border-border">
+                    {ingredients.length === 0 ? (
+                      <div className="px-4 py-4 text-sm text-muted">No ingredients yet.</div>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead className="bg-surface2/60 text-muted">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium w-20">Qty</th>
+                            <th className="px-3 py-2 text-left font-medium w-24">Unit</th>
+                            <th className="px-3 py-2 text-left font-medium">Ingredient</th>
+                            <th className="px-3 py-2 w-12" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {ingredients.map((ing, i) => (
+                            <tr key={i}>
+                              <td className="px-3 py-2 align-top">
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={ing.quantity != null ? String(ing.quantity) : ''}
+                                  onChange={(e) => updateIngredient(i, 'quantity', e.target.value)}
+                                  className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
+                                  placeholder="—"
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <input
+                                  type="text"
+                                  value={ing.unit ?? ''}
+                                  onChange={(e) => updateIngredient(i, 'unit', e.target.value)}
+                                  className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
+                                  placeholder="—"
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <input
+                                  type="text"
+                                  value={ing.name ?? ''}
+                                  onChange={(e) => updateIngredient(i, 'name', e.target.value)}
+                                  className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
+                                  placeholder="Ingredient"
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <Button variant="danger" size="sm" onClick={() => removeIngredient(i)}>
+                                  −
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-5">
+                  <div className="text-sm font-semibold">Instructions</div>
+                  <textarea
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    rows={10}
+                    className="mt-2 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
+                    placeholder="Instructions / method"
+                  />
+                </div>
+
+                <div className="border-t border-border pt-5">
+                  <div className="text-sm font-semibold">Cover image</div>
+                  <div className="mt-1 text-xs text-muted">Pick one (optional).</div>
+                  {previewData.image_urls?.length ? (
+                    <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                      {previewData.image_urls.slice(0, 24).map((imgUrl) => {
+                        const selected = selectedCoverUrl === imgUrl;
+                        return (
+                          <button
+                            key={imgUrl}
+                            type="button"
+                            onClick={() => setSelectedCoverUrl(selected ? null : imgUrl)}
+                            className={`overflow-hidden rounded-md border ${selected ? 'border-ring' : 'border-border'}`}
+                            aria-label={selected ? 'Selected cover image' : 'Select cover image'}
+                          >
+                            <img
+                              src={imgUrl}
+                              alt=""
+                              className="h-20 w-full object-cover"
+                              loading="lazy"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="mt-3 text-sm text-muted">No images found.</div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Button variant="primary" onClick={handleImportConfirm} disabled={importing}>
+                    {importing ? 'Importing…' : 'Import recipe'}
+                  </Button>
+                  <Button variant="secondary" onClick={goBackToUrl}>
+                    Back
+                  </Button>
+                  <Button variant="secondary" onClick={() => navigate('/recipes')}>
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )
       )}
     </div>
   );

@@ -5,7 +5,9 @@ import { useAuth } from '../context/AuthContext';
 import AdminFeatures from '../components/AdminFeatures';
 import { RecipeInteractions } from '../components/AdminFeatures';
 import { fixImageUrls, getImageUrl } from '../utils/imageUrl';
-import { sharedStyles } from '../utils/styles';
+import { Button } from '../components/ui/Button';
+import { Card, CardContent } from '../components/ui/Card';
+import { Dialog } from '../components/ui/Dialog';
 
 interface Recipe {
   id: number;
@@ -56,7 +58,7 @@ function escapeHtmlAttr(s: string): string {
 /** Core name without parenthetical or trailing " - ..." (e.g. "tamarind pulp (soaked)" → "tamarind pulp") */
 function getIngredientCoreName(name: string): string {
   const trimmed = name.trim();
-  const paren = trimmed.search(/\s*[(\[]/);
+  const paren = trimmed.search(/\s*[[(]/);
   const dash = trimmed.search(/\s+-\s+/);
   let end = trimmed.length;
   if (paren > 0) end = Math.min(end, paren);
@@ -227,6 +229,7 @@ export default function RecipeDetail() {
   const [scaleFactor, setScaleFactor] = useState(1);
   const [scaleInputValue, setScaleInputValue] = useState('1');
   const [tooltip, setTooltip] = useState<{ display: string; x: number; y: number } | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const { isAdmin, isGuest, user } = useAuth();
   
   // Check if current user is the recipe creator
@@ -253,373 +256,263 @@ export default function RecipeDetail() {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this recipe?')) {
-      return;
-    }
     try {
       await api.delete(`/recipes/${id}`);
       navigate('/recipes');
     } catch (error) {
       console.error('Error deleting recipe:', error);
-      alert('Failed to delete recipe');
     }
   };
 
   if (loading) {
-    return <div style={{ padding: '20px', color: '#213547' }}>Loading...</div>;
+    return (
+      <div className="container-page pt-6">
+        <div className="text-sm text-muted">Loading recipe…</div>
+      </div>
+    );
   }
 
   if (!recipe) {
-    return <div style={{ padding: '20px', color: '#213547' }}>Recipe not found</div>;
+    return (
+      <div className="container-page pt-6">
+        <div className="text-sm text-muted">Recipe not found.</div>
+      </div>
+    );
   }
 
   return (
-    <div className="page-container" style={{ maxWidth: '900px' }}>
-      <style>{`
-        ${sharedStyles}
-        .recipe-detail img {
-          max-width: 100%;
-          height: auto;
-          border-radius: 8px;
-          margin: 16px 0;
-          display: block;
-        }
-        .recipe-meta {
-          display: flex;
-          gap: 24px;
-          padding: 20px;
-          background: #f8f9fa;
-          border-radius: 8px;
-          margin-bottom: 32px;
-          flex-wrap: wrap;
-        }
-        .recipe-meta-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          color: #666;
-          font-size: 0.95rem;
-        }
-        .recipe-section {
-          margin-bottom: 32px;
-        }
-        .recipe-section h2 {
-          font-size: 1.75rem;
-          font-weight: 600;
-          color: #213547;
-          margin: 0 0 16px 0;
-          padding-bottom: 8px;
-          border-bottom: 2px solid #e9ecef;
-        }
-        .ingredients-list {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-        .ingredients-list li {
-          padding: 12px 16px;
-          margin-bottom: 8px;
-          background: #f8f9fa;
-          border-radius: 8px;
-          color: #213547;
-          border-left: 3px solid #007bff;
-        }
-        .recipe-cover-image {
-          width: 100%;
-          max-height: 500px;
-          object-fit: cover;
-          border-radius: 12px;
-          margin: 24px 0;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-        .ingredient-highlight {
-          background: linear-gradient(to bottom, transparent 60%, rgba(0, 123, 255, 0.2) 60%);
-          border-radius: 2px;
-          cursor: default;
-          padding: 0 1px;
-        }
-        .ingredient-highlight:hover {
-          background: linear-gradient(to bottom, transparent 50%, rgba(0, 123, 255, 0.35) 50%);
-        }
-        .ingredient-tooltip {
-          position: fixed;
-          z-index: 1000;
-          padding: 6px 10px;
-          background: #213547;
-          color: #fff;
-          font-size: 0.875rem;
-          border-radius: 6px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-          pointer-events: none;
-          white-space: nowrap;
-          max-width: 90vw;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-      `}</style>
-      
-      <div style={{ marginBottom: '24px' }}>
-        <Link 
-          to="/recipes" 
-          className="action-button action-button-secondary"
-          style={{ textDecoration: 'none' }}
-        >
-          ← Back to Recipes
-        </Link>
-      </div>
-
-      {!isGuest && (isAdmin || isRecipeCreator) && (
-        <div style={{ marginBottom: '24px', display: 'flex', gap: '12px' }}>
-          <Link
-            to={`/recipes/${id}/edit`}
-            className="action-button action-button-primary"
-            style={{ textDecoration: 'none' }}
-          >
-            ✏️ Edit
+    <div className="container-page pt-6 md:pt-10">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2">
+          <Link to="/recipes">
+            <Button variant="ghost" size="sm">
+              ← Recipes
+            </Button>
           </Link>
-          <button
-            onClick={handleDelete}
-            className="action-button action-button-danger"
-          >
-            🗑️ Delete
-          </button>
+          <Link to={`/recipes/${id}/cook`}>
+            <Button variant="primary" size="sm">
+              Cook mode
+            </Button>
+          </Link>
         </div>
-      )}
 
-      <div className="card" style={{ marginBottom: '32px' }}>
-        <h1 className="page-title" style={{ fontSize: '2.25rem', marginBottom: '16px' }}>
-          {recipe.title}
-        </h1>
-        
-        {recipe.cover_image && (
-          <img 
-            src={getImageUrl(recipe.cover_image) || ''} 
-            alt={recipe.title}
-            className="recipe-cover-image"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-        )}
-        
-        {recipe.tags && recipe.tags.length > 0 && (
-          <div style={{ marginBottom: '24px' }}>
-            {recipe.tags.map((tag, idx) => (
-              <span key={idx} className="tag">{tag}</span>
-            ))}
+        {!isGuest && (isAdmin || isRecipeCreator) && (
+          <div className="flex items-center gap-2">
+            <Link to={`/recipes/${id}/edit`}>
+              <Button variant="secondary" size="sm">
+                Edit
+              </Button>
+            </Link>
+            <Button variant="danger" size="sm" onClick={() => setDeleteOpen(true)}>
+              Delete
+            </Button>
           </div>
-        )}
-
-        <div className="recipe-meta">
-          {recipe.prep_time_minutes && (
-            <div className="recipe-meta-item">
-              <span>⏱️</span>
-              <span><strong>{recipe.prep_time_minutes}</strong> min prep</span>
-            </div>
-          )}
-          {recipe.cook_time_minutes && (
-            <div className="recipe-meta-item">
-              <span>🔥</span>
-              <span><strong>{recipe.cook_time_minutes}</strong> min cook</span>
-            </div>
-          )}
-          {recipe.servings && (
-            <div className="recipe-meta-item">
-              <span>👥</span>
-              <span>
-                <strong>
-                  {scaleFactor === 1 
-                    ? recipe.servings 
-                    : (recipe.servings * scaleFactor) % 1 === 0
-                      ? (recipe.servings * scaleFactor).toString()
-                      : (recipe.servings * scaleFactor).toFixed(1).replace(/\.?0+$/, '')
-                  }
-                </strong> servings
-                {scaleFactor !== 1 && (
-                  <span style={{ fontSize: '0.85em', color: '#666', marginLeft: '4px' }}>
-                    (original: {recipe.servings})
-                  </span>
-                )}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {recipe.description && (
-          <div
-            className="recipe-detail"
-            style={{ 
-              marginBottom: '32px', 
-              color: '#213547',
-              lineHeight: '1.7',
-              fontSize: '1.05rem'
-            }}
-            dangerouslySetInnerHTML={{ __html: fixImageUrls(recipe.description) }}
-          />
         )}
       </div>
 
-      {recipe.ingredients && recipe.ingredients.length > 0 && (
-        <div className="recipe-section">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-            <h2 style={{ margin: 0 }}>Ingredients</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <label style={{ fontSize: '0.95rem', color: '#666', fontWeight: '500' }}>Scale:</label>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                {[0.5, 0.75, 1, 1.5, 2].map((factor) => {
-                  const isActive = Math.abs(scaleFactor - factor) < 0.01; // Account for floating point precision
-                  return (
-                    <button
-                      key={factor}
-                      onClick={() => {
-                        setScaleFactor(factor);
-                        setScaleInputValue(factor.toString());
-                      }}
-                      style={{
-                        padding: '10px 16px',
-                        minHeight: '44px',
-                        borderRadius: '6px',
-                        border: isActive ? '2px solid #007bff' : '1px solid #e0e0e0',
-                        background: isActive ? '#e7f3ff' : 'white',
-                        color: isActive ? '#007bff' : '#213547',
-                        cursor: 'pointer',
-                        fontSize: '0.875rem',
-                        fontWeight: isActive ? '600' : '400',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      {factor}x
-                    </button>
-                  );
-                })}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '4px' }}>
-                  <input
-                    type="number"
-                    min="0.01"
-                    max="10"
-                    step="0.01"
-                    value={scaleInputValue}
-                    onChange={(e) => {
-                      const inputValue = e.target.value;
-                      setScaleInputValue(inputValue);
-                      // Allow empty input while typing
-                      if (inputValue === '' || inputValue === '.') {
-                        return;
-                      }
-                      const value = parseFloat(inputValue);
-                      if (!isNaN(value) && value > 0 && value <= 10) {
-                        setScaleFactor(value);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const value = parseFloat(e.target.value);
-                      if (isNaN(value) || value <= 0 || e.target.value === '' || e.target.value === '.') {
-                        setScaleFactor(1);
-                        setScaleInputValue('1');
-                      } else if (value > 10) {
-                        setScaleFactor(10);
-                        setScaleInputValue('10');
-                      } else {
-                        // Format the value to remove unnecessary decimals
-                        setScaleInputValue(value % 1 === 0 ? value.toString() : value.toFixed(2).replace(/\.?0+$/, ''));
-                      }
-                    }}
-                    style={{
-                      width: '70px',
-                      padding: '6px 8px',
-                      borderRadius: '6px',
-                      border: ![0.5, 0.75, 1, 1.5, 2].some(f => Math.abs(scaleFactor - f) < 0.01) 
-                        ? '2px solid #007bff' 
-                        : '1px solid #e0e0e0',
-                      background: ![0.5, 0.75, 1, 1.5, 2].some(f => Math.abs(scaleFactor - f) < 0.01)
-                        ? '#e7f3ff'
-                        : 'white',
-                      fontSize: '0.875rem',
-                      textAlign: 'center',
-                      transition: 'all 0.2s'
-                    }}
-                    placeholder="Custom"
-                  />
-                  <span style={{ fontSize: '0.875rem', color: '#666' }}>x</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <ul className="ingredients-list">
-            {recipe.ingredients.map((ing, idx) => {
-              const scaledQuantity = ing.quantity ? (ing.quantity * scaleFactor) : null;
-              // Format the scaled quantity to avoid unnecessary decimals
-              const formattedQuantity = scaledQuantity !== null 
-                ? scaledQuantity % 1 === 0 
-                  ? scaledQuantity.toString() 
-                  : scaledQuantity.toFixed(2).replace(/\.?0+$/, '')
-                : null;
-              
-              return (
-                <li key={idx}>
-                  {formattedQuantity && <strong>{formattedQuantity}</strong>}
-                  {formattedQuantity && ing.unit && ' '}
-                  {ing.unit && <strong>{ing.unit}</strong>}
-                  {(formattedQuantity || ing.unit) && ' '}
-                  {ing.name}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+      <Dialog
+        open={deleteOpen}
+        title="Delete recipe?"
+        description="This cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={async () => {
+          setDeleteOpen(false);
+          await handleDelete();
+        }}
+      />
 
-      {recipe.instructions && (
-        <div className="recipe-section">
-          <h2>Instructions</h2>
-          <div
-            className="recipe-detail instructions-with-highlights"
-            style={{
-              color: '#213547',
-              lineHeight: '1.8',
-              fontSize: '1.05rem',
-              whiteSpace: 'pre-wrap',
-            }}
-            onMouseMove={(e) => {
-              const el = (e.target as HTMLElement).closest?.('.ingredient-highlight') as HTMLElement | null;
-              const display = el?.getAttribute?.('data-ingredient-display') ?? '';
-              const name = el?.getAttribute?.('data-ingredient-name') ?? '';
-              const text = display.trim() || name.trim();
-              if (text) {
-                setTooltip({ display: text, x: e.clientX, y: e.clientY });
-              } else {
-                setTooltip(null);
-              }
-            }}
-            onMouseLeave={() => setTooltip(null)}
-          >
-            {/<[a-z][\s\S]*>/i.test(recipe.instructions) ? (
-              <div
-                className="recipe-detail"
-                style={{ lineHeight: '1.8', fontSize: '1.05rem' }}
-                dangerouslySetInnerHTML={{
-                  __html: highlightIngredientsInHtml(
-                    fixImageUrls(recipe.instructions),
-                    recipe.ingredients ?? [],
-                    scaleFactor
-                  ),
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <Card className="overflow-hidden">
+            {recipe.cover_image && (
+              <img
+                src={getImageUrl(recipe.cover_image) || ''}
+                alt={recipe.title}
+                className="h-56 w-full object-cover md:h-72"
+                loading="lazy"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
                 }}
               />
-            ) : (
-              highlightIngredientsInPlainText(
-                recipe.instructions,
-                recipe.ingredients ?? [],
-                scaleFactor,
-                'inst'
-              )
             )}
-          </div>
+            <CardContent className="p-5">
+              <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{recipe.title}</h1>
+
+              {recipe.tags && recipe.tags.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {recipe.tags.map((tag, idx) => (
+                    <span
+                      key={idx}
+                      className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-muted"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted">
+                {recipe.prep_time_minutes != null && (
+                  <span className="rounded-md border border-border bg-surface px-2 py-1">
+                    ⏱️ {recipe.prep_time_minutes}m prep
+                  </span>
+                )}
+                {recipe.cook_time_minutes != null && (
+                  <span className="rounded-md border border-border bg-surface px-2 py-1">
+                    🔥 {recipe.cook_time_minutes}m cook
+                  </span>
+                )}
+                {recipe.servings != null && (
+                  <span className="rounded-md border border-border bg-surface px-2 py-1">
+                    👥 {recipe.servings} servings
+                  </span>
+                )}
+              </div>
+
+              {recipe.description && (
+                <div
+                  className="recipe-content mt-5 text-sm leading-relaxed text-text"
+                  dangerouslySetInnerHTML={{ __html: fixImageUrls(recipe.description) }}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          {recipe.instructions && (
+            <Card className="mt-5">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-semibold">Instructions</h2>
+                  <Link to={`/recipes/${id}/cook`}>
+                    <Button variant="primary" size="sm">
+                      Start cooking
+                    </Button>
+                  </Link>
+                </div>
+
+                <div
+                  className="recipe-content mt-4 text-sm leading-relaxed text-text"
+                  onMouseMove={(e) => {
+                    const el = (e.target as HTMLElement).closest?.('.ingredient-highlight') as HTMLElement | null;
+                    const display = el?.getAttribute?.('data-ingredient-display') ?? '';
+                    const name = el?.getAttribute?.('data-ingredient-name') ?? '';
+                    const text = display.trim() || name.trim();
+                    if (text) setTooltip({ display: text, x: e.clientX, y: e.clientY });
+                    else setTooltip(null);
+                  }}
+                  onMouseLeave={() => setTooltip(null)}
+                >
+                  {/<[a-z][\s\S]*>/i.test(recipe.instructions) ? (
+                    <div
+                      className="recipe-content"
+                      dangerouslySetInnerHTML={{
+                        __html: highlightIngredientsInHtml(
+                          fixImageUrls(recipe.instructions),
+                          recipe.ingredients ?? [],
+                          scaleFactor
+                        ),
+                      }}
+                    />
+                  ) : (
+                    <div className="whitespace-pre-wrap">
+                      {highlightIngredientsInPlainText(
+                        recipe.instructions,
+                        recipe.ingredients ?? [],
+                        scaleFactor,
+                        'inst'
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
-      )}
+
+        <aside className="lg:col-span-1">
+          {recipe.ingredients && recipe.ingredients.length > 0 && (
+            <Card className="sticky top-24">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-semibold">Ingredients</h2>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted">Scale</span>
+                  {[0.5, 1, 1.5, 2].map((factor) => {
+                    const active = Math.abs(scaleFactor - factor) < 0.01;
+                    return (
+                      <Button
+                        key={factor}
+                        variant={active ? 'primary' : 'secondary'}
+                        size="sm"
+                        onClick={() => {
+                          setScaleFactor(factor);
+                          setScaleInputValue(factor.toString());
+                        }}
+                      >
+                        {factor}x
+                      </Button>
+                    );
+                  })}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0.01"
+                      max="10"
+                      step="0.01"
+                      value={scaleInputValue}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setScaleInputValue(v);
+                        if (v === '' || v === '.') return;
+                        const f = parseFloat(v);
+                        if (!isNaN(f) && f > 0 && f <= 10) setScaleFactor(f);
+                      }}
+                      onBlur={(e) => {
+                        const f = parseFloat(e.target.value);
+                        if (isNaN(f) || f <= 0 || e.target.value === '' || e.target.value === '.') {
+                          setScaleFactor(1);
+                          setScaleInputValue('1');
+                        } else if (f > 10) {
+                          setScaleFactor(10);
+                          setScaleInputValue('10');
+                        } else {
+                          setScaleInputValue(f % 1 === 0 ? f.toString() : f.toFixed(2).replace(/\.?0+$/, ''));
+                        }
+                      }}
+                      className="h-9 w-20 rounded-md border border-border bg-surface px-2 text-sm"
+                      aria-label="Custom scale"
+                    />
+                    <span className="text-xs text-muted">x</span>
+                  </div>
+                </div>
+
+                <ul className="mt-4 space-y-2">
+                  {recipe.ingredients.map((ing, idx) => {
+                    const scaledQuantity = ing.quantity != null ? ing.quantity * scaleFactor : null;
+                    const formattedQuantity =
+                      scaledQuantity != null ? (scaledQuantity % 1 === 0 ? scaledQuantity.toString() : scaledQuantity.toFixed(2).replace(/\.?0+$/, '')) : null;
+                    return (
+                      <li key={idx} className="rounded-md border border-border bg-surface px-3 py-2 text-sm">
+                        {formattedQuantity && <span className="font-semibold">{formattedQuantity} </span>}
+                        {ing.unit && <span className="font-semibold">{ing.unit} </span>}
+                        <span>{ing.name}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </aside>
+      </div>
 
       {tooltip && (
         <div
-          className="ingredient-tooltip"
+          className="fixed z-50 rounded-md bg-text px-2.5 py-1.5 text-xs text-white shadow-popover"
           style={{
             left: Math.min(tooltip.x + 12, window.innerWidth - 120),
             top: Math.max(8, tooltip.y - 32),
@@ -630,25 +523,23 @@ export default function RecipeDetail() {
       )}
 
       {recipe.source_url && (
-        <div style={{ marginTop: '32px' }}>
-          <a 
-            href={recipe.source_url} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="action-button action-button-secondary"
-            style={{ textDecoration: 'none' }}
-          >
-            🔗 View Original Source
+        <div className="mt-6">
+          <a href={recipe.source_url} target="_blank" rel="noopener noreferrer">
+            <Button variant="secondary" size="sm">
+              View original source
+            </Button>
           </a>
         </div>
       )}
 
-      {/* Ratings and Comments - Available to everyone */}
-      <RecipeInteractions recipeId={recipe.id} />
+      {/* Ratings and Comments */}
+      <div className="mt-8">
+        <RecipeInteractions recipeId={recipe.id} />
+      </div>
 
       {/* Private Notes - Only visible to recipe creator */}
       {!isGuest && isRecipeCreator && (
-        <div style={{ marginTop: '40px' }}>
+        <div className="mt-8">
           <AdminFeatures recipeId={recipe.id} />
         </div>
       )}

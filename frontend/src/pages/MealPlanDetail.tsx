@@ -63,9 +63,11 @@ export default function MealPlanDetail() {
       await api.post(`/meal-plans/${id}/recipes/${selectedRecipeId}`);
       setSelectedRecipeId('');
       fetchData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error adding recipe:', error);
-      alert(error.response?.data?.detail || 'Failed to add recipe');
+      const anyErr = error as { response?: { data?: { detail?: unknown } } };
+      const detail = anyErr.response?.data?.detail;
+      alert(typeof detail === 'string' ? detail : 'Failed to add recipe');
     } finally {
       setAddingRecipe(false);
     }

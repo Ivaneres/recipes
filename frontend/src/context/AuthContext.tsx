@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import api from '../services/api';
@@ -31,22 +32,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (isGuest) {
-      // Set guest user
-      setUser({ id: 0, username: 'Guest', email: '', role: 'reader' });
-      setIsLoading(false);
-    } else if (token) {
+    if (token) {
       fetchUser();
-    } else {
-      setIsLoading(false);
+      return;
     }
+
+    // Default to guest mode if no token is present.
+    if (!isGuest) {
+      loginAsGuest();
+    } else {
+      setUser({ id: 0, username: 'Guest', email: '', role: 'reader' });
+    }
+    setIsLoading(false);
   }, [token, isGuest]);
 
   const fetchUser = async () => {
     try {
       const response = await api.get('/auth/me');
       setUser(response.data);
-    } catch (error) {
+    } catch {
       localStorage.removeItem('token');
       setToken(null);
     } finally {

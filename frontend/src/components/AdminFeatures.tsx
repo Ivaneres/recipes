@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { sharedStyles } from '../utils/styles';
+import { Button } from './ui/Button';
+import { Card, CardContent } from './ui/Card';
+import { useToast } from './ui/Toast';
 
 interface Comment {
   id: number;
@@ -33,6 +35,7 @@ interface AdminFeaturesProps {
 export function RecipeInteractions({ recipeId }: { recipeId: number }) {
   const { isGuest } = useAuth();
   const navigate = useNavigate();
+  const { push } = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [averageRating, setAverageRating] = useState<number | null>(null);
@@ -44,6 +47,7 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (isGuest) return;
     fetchData();
   }, [recipeId]);
 
@@ -64,10 +68,7 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
 
   const handleAddComment = async () => {
     if (isGuest) {
-      const shouldLogin = confirm('Please log in to leave a comment. Would you like to go to the login page?');
-      if (shouldLogin) {
-        navigate('/login');
-      }
+      navigate('/login');
       return;
     }
     if (!newComment.trim()) return;
@@ -81,7 +82,7 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
       setNewComment('');
     } catch (error) {
       console.error('Error adding comment:', error);
-      alert('Failed to add comment');
+      push({ kind: 'error', title: 'Comment failed', message: 'Failed to add comment.' });
     } finally {
       setLoading(false);
     }
@@ -99,7 +100,7 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
       setEditCommentText('');
     } catch (error) {
       console.error('Error updating comment:', error);
-      alert('Failed to update comment');
+      push({ kind: 'error', title: 'Update failed', message: 'Failed to update comment.' });
     } finally {
       setLoading(false);
     }
@@ -113,7 +114,7 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
       setComments(comments.filter(c => c.id !== id));
     } catch (error) {
       console.error('Error deleting comment:', error);
-      alert('Failed to delete comment');
+      push({ kind: 'error', title: 'Delete failed', message: 'Failed to delete comment.' });
     } finally {
       setLoading(false);
     }
@@ -121,10 +122,7 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
 
   const handleAddRating = async () => {
     if (isGuest) {
-      const shouldLogin = confirm('Please log in to rate this recipe. Would you like to go to the login page?');
-      if (shouldLogin) {
-        navigate('/login');
-      }
+      navigate('/login');
       return;
     }
     setLoading(true);
@@ -136,220 +134,137 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
       await fetchData(); // Refresh to get updated rating
     } catch (error) {
       console.error('Error adding rating:', error);
-      alert('Failed to add rating');
+      push({ kind: 'error', title: 'Rating failed', message: 'Failed to save rating.' });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ marginTop: '40px', borderTop: '2px solid #e9ecef', paddingTop: '32px' }}>
-      <style>{sharedStyles}</style>
-      {/* Rating Section */}
-      <div className="card" style={{ marginBottom: '32px' }}>
-        <h3 style={{ color: '#213547', fontSize: '1.5rem', fontWeight: '600', marginTop: 0, marginBottom: '16px' }}>
-          ⭐ Rating
-        </h3>
+    <div className="mt-10 border-t border-border pt-8">
+      <Card className="mb-6">
+        <CardContent className="p-5">
+          <div className="text-base font-semibold">Rating</div>
         {averageRating !== null && (
-          <div style={{ marginBottom: '16px', fontSize: '1.25rem', color: '#213547' }}>
-            Average Rating: <strong style={{ color: '#007bff' }}>{averageRating.toFixed(1)}</strong> / 5.0
+          <div className="mt-2 text-sm text-muted">
+            Average: <span className="font-semibold text-text">{averageRating.toFixed(1)}</span> / 5.0
             {ratings.length > 0 && (
-              <span style={{ color: '#666', fontSize: '0.95rem', marginLeft: '8px' }}>
-                ({ratings.length} {ratings.length === 1 ? 'rating' : 'ratings'})
-              </span>
+              <span className="ml-2">({ratings.length} {ratings.length === 1 ? 'rating' : 'ratings'})</span>
             )}
           </div>
         )}
         {isGuest ? (
-          <div style={{ 
-            padding: '16px', 
-            backgroundColor: '#fff3cd', 
-            border: '1px solid #ffc107',
-            borderRadius: '8px',
-            color: '#856404'
-          }}>
-            <p style={{ margin: '0 0 12px 0', fontWeight: '500' }}>
-              🔒 Please log in to rate this recipe
-            </p>
-            <button
-              onClick={() => navigate('/login')}
-              className="action-button action-button-primary"
-              style={{ padding: '8px 16px', fontSize: '0.9rem' }}
-            >
-              Log In
-            </button>
+          <div className="mt-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+            <div className="font-medium">Log in to rate</div>
+            <div className="mt-2">
+              <Button variant="primary" size="sm" onClick={() => navigate('/login')}>
+                Log in
+              </Button>
+            </div>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#213547', fontWeight: '500' }}>
-              Your Rating:
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="flex items-center gap-2 text-sm">
+              <span className="font-medium">Your rating</span>
               <select
                 value={newRating}
                 onChange={(e) => setNewRating(Number(e.target.value))}
-                className="form-input"
-                style={{ width: 'auto', padding: '8px 12px', fontSize: '1rem' }}
+                className="h-11 rounded-md border border-border bg-surface px-3 text-sm"
               >
                 {[1, 2, 3, 4, 5].map(r => (
                   <option key={r} value={r}>{r} ⭐</option>
                 ))}
               </select>
             </label>
-            <button
-              onClick={handleAddRating}
-              disabled={loading}
-              className="action-button action-button-primary"
-              style={{ 
-                opacity: loading ? 0.6 : 1,
-                cursor: loading ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {loading ? '⏳ Saving...' : 'Rate'}
-            </button>
+            <Button variant="primary" onClick={handleAddRating} disabled={loading}>
+              {loading ? 'Saving…' : 'Save rating'}
+            </Button>
           </div>
         )}
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Comments Section */}
-      <div className="card" style={{ marginBottom: '32px' }}>
-        <h3 style={{ color: '#213547', fontSize: '1.5rem', fontWeight: '600', marginTop: 0, marginBottom: '16px' }}>
-          💬 Comments
-        </h3>
+      <Card>
+        <CardContent className="p-5">
+          <div className="text-base font-semibold">Comments</div>
         {isGuest ? (
-          <div style={{ 
-            padding: '16px', 
-            backgroundColor: '#fff3cd', 
-            border: '1px solid #ffc107',
-            borderRadius: '8px',
-            color: '#856404',
-            marginBottom: '20px'
-          }}>
-            <p style={{ margin: '0 0 12px 0', fontWeight: '500' }}>
-              🔒 Please log in to leave a comment
-            </p>
-            <button
-              onClick={() => navigate('/login')}
-              className="action-button action-button-primary"
-              style={{ padding: '8px 16px', fontSize: '0.9rem' }}
-            >
-              Log In
-            </button>
+          <div className="mt-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+            <div className="font-medium">Log in to comment</div>
+            <div className="mt-2">
+              <Button variant="primary" size="sm" onClick={() => navigate('/login')}>
+                Log in
+              </Button>
+            </div>
           </div>
         ) : (
-          <div style={{ marginBottom: '20px' }}>
+          <div className="mt-3">
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Add a comment..."
               rows={4}
-              className="form-input"
-              style={{ 
-                resize: 'vertical',
-                fontFamily: 'inherit',
-                minHeight: '100px'
-              }}
+              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
             />
-            <button
-              onClick={handleAddComment}
-              disabled={loading || !newComment.trim()}
-              className="action-button action-button-primary"
-              style={{ 
-                marginTop: '12px',
-                opacity: (loading || !newComment.trim()) ? 0.6 : 1,
-                cursor: (loading || !newComment.trim()) ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {loading ? '⏳ Adding...' : 'Add Comment'}
-            </button>
+            <div className="mt-2">
+              <Button variant="primary" onClick={handleAddComment} disabled={loading || !newComment.trim()}>
+                {loading ? 'Adding…' : 'Add comment'}
+              </Button>
+            </div>
           </div>
         )}
-        <div>
+        <div className="mt-4 space-y-2">
           {comments.length === 0 ? (
-            <p style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
-              No comments yet. Be the first to comment!
-            </p>
+            <div className="text-sm text-muted">No comments yet.</div>
           ) : (
             comments.map((comment) => (
-              <div
-                key={comment.id}
-                style={{
-                  padding: '16px',
-                  marginBottom: '12px',
-                  backgroundColor: '#f8f9fa',
-                  borderRadius: '8px',
-                  border: '1px solid #e9ecef',
-                }}
-              >
+              <div key={comment.id} className="rounded-lg border border-border bg-surface px-4 py-3">
               {editingComment === comment.id ? (
                 <div>
                   <textarea
                     value={editCommentText}
                     onChange={(e) => setEditCommentText(e.target.value)}
                     rows={3}
-                    style={{
-                      width: '100%',
-                      padding: '8px',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px',
-                      fontSize: '14px',
-                    }}
+                    className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
                   />
-                  <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
-                    <button
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
                       onClick={() => handleUpdateComment(comment.id)}
                       disabled={loading || !editCommentText.trim()}
-                      style={{
-                        padding: '5px 12px',
-                        backgroundColor: '#28a745',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
                     >
                       Save
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => {
                         setEditingComment(null);
                         setEditCommentText('');
                       }}
-                      style={{
-                        padding: '5px 12px',
-                        backgroundColor: '#6c757d',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
                     >
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
                 <>
-                  <div style={{ color: '#213547', marginBottom: '8px' }}>{comment.content}</div>
-                  <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
-                    {new Date(comment.created_at).toLocaleDateString()}
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
+                  <div className="text-sm text-text">{comment.content}</div>
+                  <div className="mt-1 text-xs text-muted">{new Date(comment.created_at).toLocaleDateString()}</div>
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => {
                         setEditingComment(comment.id);
                         setEditCommentText(comment.content);
                       }}
-                      className="action-button action-button-secondary"
-                      style={{ padding: '6px 12px', fontSize: '0.875rem' }}
                     >
-                      ✏️ Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteComment(comment.id)}
-                      className="action-button action-button-danger"
-                      style={{ padding: '6px 12px', fontSize: '0.875rem' }}
-                    >
-                      🗑️ Delete
-                    </button>
+                      Edit
+                    </Button>
+                    <Button variant="danger" size="sm" onClick={() => handleDeleteComment(comment.id)}>
+                      Delete
+                    </Button>
                   </div>
                 </>
               )}
@@ -357,7 +272,8 @@ export function RecipeInteractions({ recipeId }: { recipeId: number }) {
             ))
           )}
         </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -370,6 +286,7 @@ export default function AdminFeatures({ recipeId }: AdminFeaturesProps) {
   const [editNoteText, setEditNoteText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { push } = useToast();
 
   useEffect(() => {
     fetchNotes();
@@ -380,9 +297,10 @@ export default function AdminFeatures({ recipeId }: AdminFeaturesProps) {
       setError(null);
       const notesRes = await api.get(`/notes/recipe/${recipeId}`);
       setNotes(notesRes.data);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const anyErr = error as { response?: { status?: number } };
       // If 403, user is not the recipe creator - don't show notes
-      if (error.response?.status === 403) {
+      if (anyErr.response?.status === 403) {
         setError('You can only view notes for recipes you created');
         setNotes([]);
       } else {
@@ -409,7 +327,7 @@ export default function AdminFeatures({ recipeId }: AdminFeaturesProps) {
       setNewNote('');
     } catch (error) {
       console.error('Error adding note:', error);
-      alert('Failed to add note');
+      push({ kind: 'error', title: 'Note failed', message: 'Failed to add note.' });
     } finally {
       setLoading(false);
     }
@@ -427,7 +345,7 @@ export default function AdminFeatures({ recipeId }: AdminFeaturesProps) {
       setEditNoteText('');
     } catch (error) {
       console.error('Error updating note:', error);
-      alert('Failed to update note');
+      push({ kind: 'error', title: 'Update failed', message: 'Failed to update note.' });
     } finally {
       setLoading(false);
     }
@@ -441,144 +359,94 @@ export default function AdminFeatures({ recipeId }: AdminFeaturesProps) {
       setNotes(notes.filter(n => n.id !== id));
     } catch (error) {
       console.error('Error deleting note:', error);
-      alert('Failed to delete note');
+      push({ kind: 'error', title: 'Delete failed', message: 'Failed to delete note.' });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="card" style={{ marginTop: '40px' }}>
-      <style>{sharedStyles}</style>
-      <h2 style={{ color: '#213547', fontSize: '1.75rem', fontWeight: '600', marginTop: 0, marginBottom: '8px' }}>
-        📝 Private Notes
-      </h2>
-      <p style={{ color: '#666', fontSize: '0.9rem', marginTop: 0, marginBottom: '24px' }}>
-        Private notes visible only to you (recipe creator)
-      </p>
+    <Card className="mt-10">
+      <CardContent className="p-5">
+        <div className="text-base font-semibold">Private notes</div>
+        <div className="mt-1 text-sm text-muted">Visible only to you (recipe creator).</div>
       
       {error && !error.includes('only view notes') && (
-        <div className="alert alert-error" style={{ marginBottom: '20px' }}>
-          {error}
+        <div className="mt-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+          <div className="font-medium">Notes error</div>
+          <div className="text-muted">{error}</div>
         </div>
       )}
 
       {/* Notes Section */}
       <div>
-        <div style={{ marginBottom: '20px' }}>
+        <div className="mt-4">
           <textarea
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             placeholder="Add a private note (only visible to you)..."
             rows={4}
-            className="form-input"
-            style={{ 
-              resize: 'vertical',
-              fontFamily: 'inherit',
-              minHeight: '100px'
-            }}
+            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
           />
-          <button
-            onClick={handleAddNote}
-            disabled={loading || !newNote.trim()}
-            className="action-button action-button-secondary"
-            style={{ 
-              marginTop: '12px',
-              opacity: (loading || !newNote.trim()) ? 0.6 : 1,
-              cursor: (loading || !newNote.trim()) ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {loading ? '⏳ Adding...' : 'Add Note'}
-          </button>
+          <div className="mt-2">
+            <Button variant="secondary" onClick={handleAddNote} disabled={loading || !newNote.trim()}>
+              {loading ? 'Adding…' : 'Add note'}
+            </Button>
+          </div>
         </div>
-        <div>
+        <div className="mt-4 space-y-2">
           {notes.length === 0 ? (
-            <p style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
-              No notes yet.
-            </p>
+            <div className="text-sm text-muted">No notes yet.</div>
           ) : (
             notes.map((note) => (
-              <div
-                key={note.id}
-                style={{
-                  padding: '16px',
-                  marginBottom: '12px',
-                  backgroundColor: '#fff3cd',
-                  borderRadius: '8px',
-                  border: '1px solid #ffc107',
-                }}
-              >
+              <div key={note.id} className="rounded-lg border border-border bg-surface px-4 py-3">
               {editingNote === note.id ? (
                 <div>
                   <textarea
                     value={editNoteText}
                     onChange={(e) => setEditNoteText(e.target.value)}
                     rows={3}
-                    style={{
-                      width: '100%',
-                      padding: '8px',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px',
-                      fontSize: '14px',
-                    }}
+                    className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
                   />
-                  <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
-                    <button
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
                       onClick={() => handleUpdateNote(note.id)}
                       disabled={loading || !editNoteText.trim()}
-                      style={{
-                        padding: '5px 12px',
-                        backgroundColor: '#28a745',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
                     >
                       Save
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => {
                         setEditingNote(null);
                         setEditNoteText('');
                       }}
-                      style={{
-                        padding: '5px 12px',
-                        backgroundColor: '#6c757d',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
                     >
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
                 <>
-                  <div style={{ color: '#213547', marginBottom: '8px' }}>{note.content}</div>
-                  <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
-                    {new Date(note.created_at).toLocaleDateString()}
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
+                  <div className="text-sm text-text">{note.content}</div>
+                  <div className="mt-1 text-xs text-muted">{new Date(note.created_at).toLocaleDateString()}</div>
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => {
                         setEditingNote(note.id);
                         setEditNoteText(note.content);
                       }}
-                      className="action-button action-button-secondary"
-                      style={{ padding: '6px 12px', fontSize: '0.875rem' }}
                     >
-                      ✏️ Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteNote(note.id)}
-                      className="action-button action-button-danger"
-                      style={{ padding: '6px 12px', fontSize: '0.875rem' }}
-                    >
-                      🗑️ Delete
-                    </button>
+                      Edit
+                    </Button>
+                    <Button variant="danger" size="sm" onClick={() => handleDeleteNote(note.id)}>
+                      Delete
+                    </Button>
                   </div>
                 </>
               )}
@@ -587,6 +455,7 @@ export default function AdminFeatures({ recipeId }: AdminFeaturesProps) {
           )}
         </div>
       </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

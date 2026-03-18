@@ -90,10 +90,6 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
     }
   };
 
-  if (!editor) {
-    return null;
-  }
-
   // Handle focus styling - attach to container and check editor focus state
   useEffect(() => {
     if (!editor || !containerRef.current) return;
@@ -109,7 +105,7 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
                 containerRef.current.style.borderColor = '#007bff';
                 containerRef.current.style.boxShadow = '0 0 0 0.2rem rgba(0, 123, 255, 0.25)';
               }
-            } catch (e) {
+            } catch {
               // Editor view not ready, use fallback
               containerRef.current.style.borderColor = '#007bff';
               containerRef.current.style.boxShadow = '0 0 0 0.2rem rgba(0, 123, 255, 0.25)';
@@ -138,6 +134,10 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
       container.removeEventListener('focusout', handleFocusOut);
     };
   }, [editor]);
+
+  if (!editor) {
+    return null;
+  }
 
   return (
     <div 
